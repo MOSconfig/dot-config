@@ -54,8 +54,9 @@ long_command = false
 threshold_secs = 10
 
 [status_line]
-enabled = false
+enabled = true
 hide_sensitive = false
-left = ["mode", "font", "scroll", "input", "paste", "ime", "zoom"]
-right = ["alerts", "clip", "mem", "frame"]
+left = []
+right = []
 font_scale = 0.85
+center = []
