@@ -50,7 +50,7 @@ link	bin/my-tool	.local/bin/my-tool
 
 ### tmux 与 RMUX 覆盖
 
-`~/.tmux.conf` 末尾是 `source-file -q ~/.tmux.local.conf`，`~/.rmux.conf` 末尾是 `source-file -q ~/.rmux.local.conf`。上游从不提供这两个文件。它们最后加载，所以其中设置的任何选项都会生效，包括活动标签颜色 `window-status-current-style`。
+`~/.tmux.conf` 末尾是 `source-file -q ~/.tmux.local.conf`，`~/.rmux.conf` 末尾是 `source-file -q ~/.rmux.local.conf`。上游从不提供这两个文件。它们最后加载，所以其中设置的任何选项都会生效，包括活动标签颜色 `window-status-current-style`（默认来自 Apollo）。
 
 ```text
 # local/manifest.tsv

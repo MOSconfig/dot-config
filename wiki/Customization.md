@@ -50,7 +50,7 @@ Removing a row does not remove its old link. Delete that link by hand.
 
 ### tmux and RMUX overrides
 
-`~/.tmux.conf` ends with `source-file -q ~/.tmux.local.conf`, and `~/.rmux.conf` ends with `source-file -q ~/.rmux.local.conf`. Upstream never ships either file. Because they load last, any option set there wins, including `window-status-current-style`, the active tab color.
+`~/.tmux.conf` ends with `source-file -q ~/.tmux.local.conf`, and `~/.rmux.conf` ends with `source-file -q ~/.rmux.local.conf`. Upstream never ships either file. Because they load last, any option set there wins, including `window-status-current-style`, the active tab color, which otherwise comes from Apollo.
 
 ```text
 # local/manifest.tsv

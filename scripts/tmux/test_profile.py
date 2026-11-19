@@ -25,7 +25,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 PROFILE = ROOT / 'config/tmux/tmux.conf'
 THEME = '''set-option -g status-style "bg=default,fg=default"
-set-option -g status-left-style "bg=default,fg=default,bold"
+set-option -g status-left-style "bg=yellow,fg=black,bold"
 set-option -g status-right-style "bg=default,fg=white"
 set-window-option -g window-status-style "bg=black,fg=white"
 set-window-option -g window-status-current-style "bg=blue,fg=black,bold"
@@ -352,24 +352,26 @@ class ProfileTests(unittest.TestCase):
         roles = {tokens[-2]: tokens[-1] for line in theme_text().splitlines()
                  if (tokens := shlex.split(line, comments=True))}
         bar = re.search(r'bg=([^,]+)', roles['status-style']).group(1)
-        bell = roles['window-status-bell-style']
-        red = re.search(r'bg=([^,]+)', bell).group(1)
+        left = roles['status-left-style']
+        left_bg = re.search(r'bg=([^,]+)', left).group(1)
         self.assertEqual(tm.option('status-style'), roles['status-style'])
         for name in ('pane-border-style', 'pane-active-border-style', 'message-style', 'message-command-style', 'mode-style'):
             expected = roles[name]
             if name in ('message-style', 'message-command-style'):
                 expected += ',fill=' + re.search(r'bg=([^,]+)', roles[name]).group(1)
             self.assertEqual(tm.option(name), expected)
-        cap = f'#[fg={red},bg={bar},nobold]'
+        cap = f'#[fg={left_bg},bg={bar},nobold]'
         for session, shown in [('profile', 'profile'), ('abcdefghijklmnopqrstuvwxyz', 'abcdefghijklmnopqrs'),
                                 ('界' * 12, '界' * 9)]:
             tm.command('rename-session', '-t', tm.format('#{session_id}', tm.pane), session)
-            self.assertEqual(tm.format('#{E:status-left}', tm.pane), f'{cap}#[{bell}] {shown} {cap} ')
+            self.assertEqual(tm.format('#{E:status-left}', tm.pane), f'{cap}#[{left}] {shown} {cap} ')
         tm.command('rename-session', '-t', tm.format('#{session_id}', tm.pane), 'profile')
         self.assertEqual(tm.option('status-right'), ' #{?client_prefix,PREFIX  ,}%H:%M ')
         self.assertRegex(tm.format('#{T:status-right}'), r'^ \d{2}:\d{2} $')
-        current_cap = f'#[fg=#365b80,bg={bar},nobold]'
-        current = f'{current_cap}#[bg=#365b80,fg=#ffffff,bold] 1: shell'
+        current_style = roles['window-status-current-style']
+        current_bg = re.search(r'bg=([^,]+)', current_style).group(1)
+        current_cap = f'#[fg={current_bg},bg={bar},nobold]'
+        current = f'{current_cap}#[{current_style}] 1: shell'
         self.assertEqual(tm.format('#{E:window-status-current-format}'), f'{current} {current_cap}')
         tm.command('split-window', '-d', '-t', tm.pane, '/bin/sh')
         tm.command('resize-pane', '-Z', '-t', tm.pane)
