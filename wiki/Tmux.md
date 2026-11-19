@@ -36,8 +36,8 @@ Use `td NAME` only when you intend to stop a session. PID 1 parentage does not p
 The profile keeps RMUX's user-visible design:
 
 - C-q prefix, one bottom status row, mouse support, and Vi copy mode.
-- Apollo status, border, message, and copy-mode colors from the pinned official tmux theme.
-- The same sloped session/window labels, spacing, numbered app icons, dark-blue active tab with bold white text, and inactive tabs on the bar background.
+- Apollo status, session label, active tab, border, message, and copy-mode colors from the pinned official tmux theme.
+- The same sloped session/window labels, spacing, numbered app icons, and inactive tabs on the bar background.
 - An optional `~/.tmux.local.conf`, loaded last, so you can override any option, such as the active tab color, without editing upstream. See [Customization](Customization.md).
 - One space between each app icon and title. Icons follow Claude, Copilot, Vim/Neovim, or the fallback terminal command, not a custom title.
 - `PREFIX`, `ZOOM`, activity and bell states, plus a plain `HH:MM` clock.

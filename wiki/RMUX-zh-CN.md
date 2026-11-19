@@ -60,9 +60,9 @@ RMUX 使用 tmux 命令语法，不是 JSON、YAML 或 TOML。配置可以执行
 
 配置会清除守护进程可能继承的陈旧 `TERMINFO`、`TERMINFO_DIRS` 和 `TERMCAP`，然后设置 `COLORTERM=truecolor` 与 `FORCE_COLOR=3`。它不会清除 RMUX 自己的 `TERM_PROGRAM` 身份。
 
-`install.sh` 会验证 Apollo monorepo 的官方 `rmux-v0.2.1` release，并把仅含主题的配置链接到 `~/.config/rmux-apollo-theme/`。本机 RMUX 文件会 source 它，用于 status、window、pane、message 和 copy-mode 样式。状态栏与本机 bufferline.nvim 配置保持一致：斜边分隔符、深蓝底加粗白字的活动标签，以及与状态栏背景一致的非活动标签。只有活动标签的颜色使用固定的 bufferline 专用覆盖值，其余颜色均来自 Apollo。可选的 `~/.rmux.local.conf` 最后加载，可覆盖任何选项，包括活动标签颜色；请看 [自定义](Customization-zh-CN.md)。不会添加 plugin manager 或 shell bootstrap。
+`install.sh` 会验证 Apollo monorepo 的官方 `rmux-v0.2.1` release，并把仅含主题的配置链接到 `~/.config/rmux-apollo-theme/`。本机 RMUX 文件会 source 它，用于 status、window、pane、message 和 copy-mode 样式。状态栏使用斜边分隔符，非活动标签与状态栏背景一致。会话标签使用 Apollo 的 `status-left-style`，活动标签使用 Apollo 的 `window-status-current-style`，其余颜色也都来自 Apollo。可选的 `~/.rmux.local.conf` 最后加载，可覆盖任何选项，包括活动标签颜色；请看 [自定义](Customization-zh-CN.md)。不会添加 plugin manager 或 shell bootstrap。
 
-底部状态栏左侧显示红色斜边会话标签和带编号的斜边窗口标签，右侧只显示 `HH:MM` 时钟。会话标签与窗口标签之间、各窗口标签之间均留一个字符的间距。会话名称最多占 19 个显示单元，确保两端斜边可完整放入 24 单元的标签宽度内。活动提醒和响铃颜色仍然可见。Prefix 生效时显示 `PREFIX`，窗口缩放时显示 `ZOOM`。斜边使用与 bufferline 的 `slope` 样式相同的 Powerline 字形（`U+E0BA` 和 `U+E0BC`），终端字体或后备字体须支持它们。不显示完整日期或装饰性时钟图标。
+底部状态栏左侧显示黄色斜边会话标签和带编号的斜边窗口标签，右侧只显示 `HH:MM` 时钟。会话标签与窗口标签之间、各窗口标签之间均留一个字符的间距。会话名称最多占 19 个显示单元，确保两端斜边可完整放入 24 单元的标签宽度内。活动提醒和响铃颜色仍然可见。Prefix 生效时显示 `PREFIX`，窗口缩放时显示 `ZOOM`。斜边使用与 bufferline 的 `slope` 样式相同的 Powerline 字形（`U+E0BA` 和 `U+E0BC`），终端字体或后备字体须支持它们。不显示完整日期或装饰性时钟图标。
 
 外层 `xterm-256color` 能力包含 `osc7` 与 `hyperlinks`，并且已启用 `set-titles`。`hyperlinks` 声明 SonicTerm 接受 OSC 8 链接；RMUX 0.10 即使没有它也会转发，原生 tmux 则不会。Oh My Zsh 的 `omz_termsupport_cwd` hook 会在每次显示提示符时发出带主机名的 OSC 7 报告。RMUX 按 pane 记录该报告，并把活动 pane 的路径转发给 SonicTerm，因此相对文件路径会按正确目录解析。`#{pane_current_path}` 是进程 metadata，不能代替 shell 报告。修改 `terminal-features` 后，请重载配置并 detach/reattach，让客户端重新解析能力。
 

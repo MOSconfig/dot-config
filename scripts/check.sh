@@ -1458,7 +1458,7 @@ run_rmux_smoke() {
     mkdir -p "$test_home/.config/rmux-apollo-theme"
     cat >"$test_home/.config/rmux-apollo-theme/apollo-rmux.conf" <<'RMUX_THEME'
 set-option -g status-style "bg=default,fg=default"
-set-option -g status-left-style "bg=default,fg=default,bold"
+set-option -g status-left-style "bg=yellow,fg=black,bold"
 set-window-option -g window-status-style "bg=black,fg=white"
 set-window-option -g window-status-current-style "bg=blue,fg=black,bold"
 set-window-option -g window-status-activity-style "bg=black,fg=red,bold"
@@ -1492,11 +1492,11 @@ RMUX_THEME
     [ "$(rmux -L "$socket" show-options -gv status-position)" = "bottom" ]
     [ "$(rmux -L "$socket" show-options -gv status-justify)" = "left" ]
     [ "$(rmux -L "$socket" show-options -gv status-left-length)" = "24" ]
-    [ "$(rmux -L "$socket" display-message -p -t validate -F '#{E:status-left}')" = '#[fg=red,bg=default,nobold]#[bg=red,fg=black,bold] validate #[fg=red,bg=default,nobold] ' ]
+    [ "$(rmux -L "$socket" display-message -p -t validate -F '#{E:status-left}')" = '#[fg=yellow,bg=default,nobold]#[bg=yellow,fg=black,bold] validate #[fg=yellow,bg=default,nobold] ' ]
     rmux -L "$socket" new-session -d -s abcdefghijklmnopqrstuvwxyz /bin/sh
-    [ "$(rmux -L "$socket" display-message -p -t abcdefghijklmnopqrstuvwxyz -F '#{E:status-left}')" = '#[fg=red,bg=default,nobold]#[bg=red,fg=black,bold] abcdefghijklmnopqrs #[fg=red,bg=default,nobold] ' ]
+    [ "$(rmux -L "$socket" display-message -p -t abcdefghijklmnopqrstuvwxyz -F '#{E:status-left}')" = '#[fg=yellow,bg=default,nobold]#[bg=yellow,fg=black,bold] abcdefghijklmnopqrs #[fg=yellow,bg=default,nobold] ' ]
     rmux -L "$socket" rename-session -t abcdefghijklmnopqrstuvwxyz '界界界界界界界界界界界界'
-    [ "$(rmux -L "$socket" display-message -p -t '界界界界界界界界界界界界' -F '#{E:status-left}')" = '#[fg=red,bg=default,nobold]#[bg=red,fg=black,bold] 界界界界界界界界界 #[fg=red,bg=default,nobold] ' ]
+    [ "$(rmux -L "$socket" display-message -p -t '界界界界界界界界界界界界' -F '#{E:status-left}')" = '#[fg=yellow,bg=default,nobold]#[bg=yellow,fg=black,bold] 界界界界界界界界界 #[fg=yellow,bg=default,nobold] ' ]
     rmux -L "$socket" kill-session -t '界界界界界界界界界界界界'
     [ "$(rmux -L "$socket" show-options -gv status-right-length)" = "24" ]
     [ "$(rmux -L "$socket" show-options -gv status-right)" = ' #{?client_prefix,PREFIX  ,}%H:%M ' ]
@@ -1521,13 +1521,13 @@ RMUX_THEME
     rmux -L "$socket" rename-window -t validate shell
     local tab_format inactive_style expected_cap tab_index flags bell activity expected_style expected_background
     tab_index="$(rmux -L "$socket" display-message -p -t validate -F '#I')"
-    expected_cap='#[fg=#365b80,bg=default,nobold]'
-    [ "$(rmux -L "$socket" display-message -p -t validate -F '#{E:window-status-current-format}')" = "${expected_cap}#[bg=#365b80,fg=#ffffff,bold] ${tab_index}: shell ${expected_cap}" ]
+    expected_cap='#[fg=blue,bg=default,nobold]'
+    [ "$(rmux -L "$socket" display-message -p -t validate -F '#{E:window-status-current-format}')" = "${expected_cap}#[bg=blue,fg=black,bold] ${tab_index}: shell ${expected_cap}" ]
     rmux -L "$socket" split-window -d -t validate /bin/sh
     rmux -L "$socket" resize-pane -Z -t validate
-    [ "$(rmux -L "$socket" display-message -p -t validate -F '#{E:window-status-current-format}')" = "${expected_cap}#[bg=#365b80,fg=#ffffff,bold] ${tab_index}: shell ZOOM ${expected_cap}" ]
+    [ "$(rmux -L "$socket" display-message -p -t validate -F '#{E:window-status-current-format}')" = "${expected_cap}#[bg=blue,fg=black,bold] ${tab_index}: shell ZOOM ${expected_cap}" ]
     rmux -L "$socket" resize-pane -Z -t validate
-    [ "$(rmux -L "$socket" display-message -p -t validate -F '#{E:window-status-current-format}')" = "${expected_cap}#[bg=#365b80,fg=#ffffff,bold] ${tab_index}: shell ${expected_cap}" ]
+    [ "$(rmux -L "$socket" display-message -p -t validate -F '#{E:window-status-current-format}')" = "${expected_cap}#[bg=blue,fg=black,bold] ${tab_index}: shell ${expected_cap}" ]
     inactive_style="$(rmux -L "$socket" show-options -gv @tab-inactive-style)"
     [ "$inactive_style" = '#{?window_bell_flag,#{window-status-bell-style},#{?window_activity_flag,#{window-status-activity-style},#{window-status-style}}}' ]
     for flags in 00 01 10 11; do
@@ -1676,8 +1676,7 @@ run_apollo_smoke() {
       config/claude/statusline.sh \
       config/copilot/statusline.sh \
       config/zsh/themes/apollo.zsh-theme || \
-      grep -hFxv "set -g window-status-current-style 'bg=#365b80,fg=#ffffff,bold'" \
-        config/rmux/rmux.conf config/tmux/tmux.conf | grep -En '#[0-9a-fA-F]{6}|38;2;|48;2;'; then
+      grep -En '#[0-9a-fA-F]{6}|38;2;|48;2;' config/rmux/rmux.conf config/tmux/tmux.conf; then
     echo "tracked active theme consumers contain embedded palette colors" >&2
     return 1
   fi
@@ -2915,8 +2914,9 @@ run_local_overlay_smoke() {
   )
 }
 
-# ~/.tmux.local.conf and ~/.rmux.local.conf load last, so a fork can set any
-# option, such as the active tab style, without editing upstream config.
+# The active tab style comes from the Apollo theme. ~/.tmux.local.conf and
+# ~/.rmux.local.conf load last, so a fork can set any option, such as the
+# active tab style, without editing upstream config.
 run_mux_local_override_smoke() {
   local engine
   for engine in tmux rmux; do
@@ -2929,15 +2929,21 @@ run_mux_local_override_smoke() {
       continue
     fi
     (
-      local test_root socket conf style
+      local test_root socket conf style theme
       test_root="$(mktemp -d)"
       socket="dot-configs-override-$engine-$$"
       trap '"$engine" -L "$socket" kill-server >/dev/null 2>&1 || true; rm -rf "$test_root"' EXIT
       conf="$repo_root/config/$engine/$engine.conf"
       export HOME="$test_root"
+      case "$engine" in
+        tmux) theme="$test_root/.config/tmux-apollo-theme/apollo.tmux" ;;
+        rmux) theme="$test_root/.config/rmux-apollo-theme/apollo-rmux.conf" ;;
+      esac
+      mkdir -p "${theme%/*}"
+      printf 'set-window-option -g window-status-current-style "bg=#83a598,fg=#141617,bold"\n' >"$theme"
       "$engine" -L "$socket" -f "$conf" new-session -d -s override
       style="$("$engine" -L "$socket" show-options -gv window-status-current-style)"
-      [ "$style" = 'bg=#365b80,fg=#ffffff,bold' ] || {
+      [ "$style" = 'bg=#83a598,fg=#141617,bold' ] || {
         echo "$engine default active tab style changed: $style" >&2
         return 1
       }
