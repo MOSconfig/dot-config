@@ -2494,10 +2494,10 @@ run_shell_update_smoke() {
     git -C "$seed" push -q "$origin" main
     ln -s "$work/config/zsh/uu.zsh" "$custom/uu.zsh"
 
-    # uu --all reaches install.sh, which then also sets up Firefox.
-    out="$(UU_CAPTURE="$capture" zsh -f -c 'source "$1"; uu --all' _ "$custom/uu.zsh")"
+    # uu --firefox reaches install.sh, which then also sets up Firefox.
+    out="$(UU_CAPTURE="$capture" zsh -f -c 'source "$1"; uu --firefox' _ "$custom/uu.zsh")"
     [ "$(git -C "$work" rev-parse HEAD)" = "$(git -C "$seed" rev-parse HEAD)" ]
-    [ "$(cat "$capture")" = "--all" ]
+    [ "$(cat "$capture")" = "--firefox" ]
     printf '%s\n' "$out" | grep -Fq 'second'
     rm -f "$capture"
     out="$(UU_CAPTURE="$capture" zsh -f -c 'source "$1"; uu' _ "$custom/uu.zsh")"
@@ -3128,29 +3128,34 @@ INI
     [ -z "$(install_firefox_config)" ]
     mv "$test_root/gone" "$base"
 
-    # Plain uu and ./install.sh leave Firefox alone; only --all sets it up.
+    # Plain uu and ./install.sh leave Firefox alone; only --firefox sets it up.
     rm -f "$base/Profiles/new/user.js"
-    install_all=0
+    install_firefox=0
     out="$(install_firefox_step)"
-    [ "$out" = "Firefox: skipped; run uu --all or ./install.sh --all to set it up." ]
+    [ "$out" = "Firefox: skipped; run uu --firefox or ./install.sh --firefox to set it up." ]
     [ ! -e "$base/Profiles/new/user.js" ]
-    parse_install_args --all
-    [ "$install_all" = 1 ]
+    parse_install_args --firefox
+    [ "$install_firefox" = 1 ]
     install_firefox_step >/dev/null
     [ "$(readlink "$base/Profiles/new/user.js")" = "$repo_root/config/firefox/user.js" ]
-    install_all=0
+    install_firefox=0
     parse_install_args
-    [ "$install_all" = 0 ]
+    [ "$install_firefox" = 0 ]
 
     # Unknown options stop before anything runs; -h prints usage.
-    if out="$(bash install.sh --firefox 2>&1)"; then
+    if out="$(bash install.sh --bogus 2>&1)"; then
       echo "install.sh accepted an unknown option" >&2
       return 1
     fi
-    printf '%s\n' "$out" | grep -Fq 'install.sh: unknown option: --firefox'
-    printf '%s\n' "$out" | grep -Fq 'Usage: ./install.sh [--all]'
+    printf '%s\n' "$out" | grep -Fq 'install.sh: unknown option: --bogus'
+    # The old --all flag is gone; Firefox needs --firefox.
+    if bash install.sh --all >/dev/null 2>&1; then
+      echo "install.sh still accepts --all" >&2
+      return 1
+    fi
+    printf '%s\n' "$out" | grep -Fq 'Usage: ./install.sh [--firefox]'
     [ ! -e "$HOME/Library/Logs/dot-configs-install.log" ]
-    bash install.sh -h | grep -Fq 'Usage: ./install.sh [--all]'
+    bash install.sh -h | grep -Fq 'Usage: ./install.sh [--firefox]'
   )
 }
 
