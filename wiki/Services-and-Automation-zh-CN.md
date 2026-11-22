@@ -65,21 +65,21 @@ http://127.0.0.1:4142
 
 ```yaml
 claudeSetup: false
-thinkEffort: high
+thinkEffort: xhigh
 upstreamTimeoutSeconds: 900
-gptModel: gpt-6-astra
+gptModel: gpt-6.2-astra
 opusModel: claude-opus-5.5
 claudeUpstreamApi: chat-completions
 codexSetup: false
 ```
 
-`opusModel` 使用规范上游 ID，不加 `[1m]`。Claude 以原生 `claude-opus-5-5[1m]` 启动，路由到 Opus 5.5。Sonnet、Haiku 和 small-fast 直接调用 `gpt-6-astra[1m]`，空白 WebSearch 后端使用 Astra。Opus 工具选择限制见 [Claude Code](Claude-Code-zh-CN.md)。
+`opusModel` 使用规范上游 ID，不加 `[1m]`。Claude 以原生 `claude-opus-5-5[1m]` 启动，路由到 Opus 5.5。Sonnet、Haiku 和 small-fast 直接调用 `gpt-6.2-astra[1m]`，空白 WebSearch 后端使用 Astra。Opus 工具选择限制见 [Claude Code](Claude-Code-zh-CN.md)。
 
 `claudeUpstreamApi: chat-completions` 让 Claude 请求继续使用 Copilot 的 chat-completions API。这是 copilot-relay 0.4.0 的默认值；明确写出后，受管文件与 relay 自带模板一致。`auto` 或 `messages` 会改用 Copilot 原生 Messages API。
 
 在 zsh 中，Tab 可补全 copilot-relay 的命令、参数和已配置模型；请看 [SonicTerm 与 Shell](SonicTerm-and-Shell-zh-CN.md)。`install.sh`（以及 `uu`）会把 relay 保持在 npm 最新版本。
 
-不再使用 Codex。`codexSetup: false` 阻止 relay 修改 `~/.codex`。请保留这个键：relay 会把缺失的键按默认值 `true` 写回。`claudeSetup: false` 会阻止 relay 重写链接的 Claude settings。Relay 的 `thinkEffort` 回退值与 Claude 保存的 Opus 偏好、启动器和状态栏回退值都使用 `high`；客户端显式指定的 effort 仍优先。Copilot CLI 和 `gg` 保留独立的 Astra/`high` 默认值。模型路由和 relay effort 会热重载，无需重启；已有 shell 需要重新加载 Claude 启动器或打开新 shell。`upstreamTimeoutSeconds: 900` 允许单个 Claude 请求的上游 Copilot 调用最多等待十五分钟。
+不再使用 Codex。`codexSetup: false` 阻止 relay 修改 `~/.codex`。请保留这个键：relay 会把缺失的键按默认值 `true` 写回。`claudeSetup: false` 会阻止 relay 重写链接的 Claude settings。Relay 的 `thinkEffort` 回退值为 `xhigh`；Claude 保存的 Opus 偏好也使用 `xhigh`；启动器和状态栏回退值使用 `high`；客户端显式指定的 effort 仍优先。Copilot CLI 和 `gg` 保留独立的 Astra/`high` 默认值。模型路由和 relay effort 会热重载，无需重启；已有 shell 需要重新加载 Claude 启动器或打开新 shell。`upstreamTimeoutSeconds: 900` 允许单个 Claude 请求的上游 Copilot 调用最多等待十五分钟。
 
 登录一次：
 
@@ -92,7 +92,7 @@ npx copilot-relay auth
 
 ### Claude app
 
-Claude app（第三方模式，`~/Library/Application Support/Claude-3p/`）把 relay 用作网关，提供两个模型：Claude Opus 5.5（`claude-opus-5.5`）和 GPT-6 Astra，后者以路由名 `claude-sonnet-relay` 列出。app 会拒绝看起来属于其他厂商的模型名（例如 `gpt-6-astra`），并在关闭模型发现时标记 `sonnet` 这类纯别名，所以 GPT-6 Astra 使用这个 Claude 风格的路由名；relay 会把所有不含 "opus" 的名称发往 `gptModel`。
+Claude app（第三方模式，`~/Library/Application Support/Claude-3p/`）把 relay 用作网关，提供两个模型：Claude Opus 5.5（`claude-opus-5.5`）和 GPT-6.2 Astra，后者以路由名 `claude-sonnet-relay` 列出。app 会拒绝看起来属于其他厂商的模型名（例如 `gpt-6.2-astra`），并在关闭模型发现时标记 `sonnet` 这类纯别名，所以 GPT-6.2 Astra 使用这个 Claude 风格的路由名；relay 会把所有不含 "opus" 的名称发往 `gptModel`。
 
 这份配置不在本仓库中跟踪：它包含网关密钥和按机器生成的文件名。请改用 relay 的设置来恢复。先退出 app，因为它运行时会重写这些文件：
 

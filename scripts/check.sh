@@ -237,18 +237,18 @@ run_model_default_smoke() {
     .model == "opus[1m]" and
     (has("effortLevel") | not) and
     .env.MODEL_REASONING_EFFORT == "high" and
-    .modelSettings["claude-opus-5-5"].effortLevel == "high" and
+    .modelSettings["claude-opus-5-5"].effortLevel == "xhigh" and
     .modelSettings["claude-sonnet-5"].effortLevel == "high" and
     .modelPicker.replaceBuiltInOptions == true and
     ([.modelPicker.options[] | [.model, .label]]
-      == [["opus[1m]", "Opus 5.5 (1M context)"], ["gpt-6-astra[1m]", "GPT-6 Astra (1M context)"]]) and
+      == [["opus[1m]", "Opus 5.5 (1M context)"], ["gpt-6.2-astra[1m]", "GPT-6.2 Astra (1M context)"]]) and
     .modelPicker.options[1].behavesAs == "claude-sonnet-5" and
     (.modelPicker.options | all(.description | type == "string" and length > 0)) and
     (has("availableModels") | not) and
     .env.ANTHROPIC_DEFAULT_OPUS_MODEL == "claude-opus-5-5[1m]" and
-    .env.ANTHROPIC_DEFAULT_SONNET_MODEL == "gpt-6-astra[1m]" and
-    .env.ANTHROPIC_DEFAULT_HAIKU_MODEL == "gpt-6-astra[1m]" and
-    .env.ANTHROPIC_SMALL_FAST_MODEL == "gpt-6-astra[1m]" and
+    .env.ANTHROPIC_DEFAULT_SONNET_MODEL == "gpt-6.2-astra[1m]" and
+    .env.ANTHROPIC_DEFAULT_HAIKU_MODEL == "gpt-6.2-astra[1m]" and
+    .env.ANTHROPIC_SMALL_FAST_MODEL == "gpt-6.2-astra[1m]" and
     .env.ANTHROPIC_BASE_URL == "http://127.0.0.1:4142" and
     .env.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS == "16" and
     .autoCompactEnabled == true and
@@ -274,7 +274,7 @@ run_model_default_smoke() {
     .extraKnownMarketplaces["mux-agents"].source == {"source": "github", "repo": "D0n9X1n/mux-agents"}
   ' config/claude/settings.json >/dev/null
 
-  # Opus stays native; every other Claude slot calls GPT-6 Astra directly.
+  # Opus stays native; every other Claude slot calls GPT-6.2 Astra directly.
   if jq -e '
       [(.env | to_entries[] | select(.key | test("^ANTHROPIC_.*MODEL")) | .value),
        .model,
@@ -282,7 +282,7 @@ run_model_default_smoke() {
       | map(select(type == "string") | ascii_downcase)
       | any(test("sonnet|haiku"))
     ' config/claude/settings.json >/dev/null; then
-    echo "config/claude/settings.json still selects a Claude Sonnet or Haiku id; use gpt-6-astra[1m]" >&2
+    echo "config/claude/settings.json still selects a Claude Sonnet or Haiku id; use gpt-6.2-astra[1m]" >&2
     return 1
   fi
 
@@ -299,10 +299,10 @@ run_model_default_smoke() {
     .extraKnownMarketplaces["mux-agents"].source == {"source": "github", "repo": "D0n9X1n/mux-agents"}
   ' config/copilot/settings.json >/dev/null
 
-  # Relay: Opus remains separate; every non-Opus route uses GPT-6 Astra.
+  # Relay: Opus remains separate; every non-Opus route uses GPT-6.2 Astra.
   grep -Eq '^opusModel:[[:space:]]*claude-opus-5\.5$' config/copilot-relay/config.yaml
-  grep -Eq '^gptModel:[[:space:]]*gpt-6-astra$' config/copilot-relay/config.yaml
-  grep -Eq '^thinkEffort:[[:space:]]*high$' config/copilot-relay/config.yaml
+  grep -Eq '^gptModel:[[:space:]]*gpt-6\.2-astra$' config/copilot-relay/config.yaml
+  grep -Eq '^thinkEffort:[[:space:]]*xhigh$' config/copilot-relay/config.yaml
   grep -Eq '^upstreamTimeoutSeconds:[[:space:]]*900$' config/copilot-relay/config.yaml
   grep -Eq '^claudeUpstreamApi:[[:space:]]*chat-completions$' config/copilot-relay/config.yaml
 
@@ -411,7 +411,7 @@ SH
     fi
   )
 
-  echo "model defaults ok: Opus 5.5 at high by default; Sonnet, Haiku, and small-fast call GPT-6 Astra 1M directly"
+  echo "model defaults ok: Opus 5.5 by default (launchers high, saved xhigh); Sonnet, Haiku, and small-fast call GPT-6.2 Astra 1M directly"
 }
 
 run_mcp_default_smoke() {
@@ -561,10 +561,10 @@ run_global_instructions_smoke() {
     grep -Fq 'repo-only' "$file"
     grep -Fq 'claude-opus-5-5[1m]' "$file"
     grep -Fq '`claude-opus-5-5[1m]` at `high`' "$file"
-    grep -Fq 'Opus 5.5 and GPT-6 Astra' "$file"
-    grep -Fq 'gpt-6-astra[1m]' "$file"
+    grep -Fq 'Opus 5.5 and GPT-6.2 Astra' "$file"
+    grep -Fq 'gpt-6.2-astra[1m]' "$file"
     grep -Fq 'gptModel' "$file"
-    grep -Fq 'gpt-6-astra' "$file"
+    grep -Fq '`gptModel` (`gpt-6.2-astra`)' "$file"
     grep -Fq 'claude-opus-5.5' "$file"
     if grep -Fq 'Never put a GPT id' "$file"; then
       echo "$file still carries the retired no-GPT rule" >&2

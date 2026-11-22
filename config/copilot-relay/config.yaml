@@ -25,7 +25,7 @@ logLevel: info
 logRetentionDays: 3
 
 # Fallback effort when the request omits it: low, medium, high, xhigh, max.
-thinkEffort: high
+thinkEffort: xhigh
 
 # Max seconds for one request's upstream calls; 0 disables the relay deadline.
 upstreamTimeoutSeconds: 900
@@ -36,7 +36,7 @@ webSearchBackend:
 # Model routing: requests containing "opus" use opusModel; all others use gptModel.
 
 # Upstream Copilot model used for non-Opus requests.
-gptModel: gpt-6-astra
+gptModel: gpt-6.2-astra
 
 # Upstream Copilot model used for requests containing "opus".
 opusModel: claude-opus-5.5
