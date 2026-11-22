@@ -31,6 +31,6 @@ function gg {
     _tmux_store rename "$title" 2>/dev/null
   fi
   TERM_PROGRAM=WezTerm COLORTERM=truecolor FORCE_COLOR=3 \
-    command copilot --yolo --model gpt-6-astra --context long_context --effort high
+    command copilot --yolo --model gpt-6-astra --context long_context --effort xhigh
   unset DISABLE_AUTO_TITLE
 }

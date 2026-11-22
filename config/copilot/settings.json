@@ -70,7 +70,7 @@
     "autoConnect": true,
     "openDiffOnEdit": true
   },
-  "effortLevel": "high",
+  "effortLevel": "xhigh",
   "showReasoning": false,
   "extraKnownMarketplaces": {
     "feature-crew": {

@@ -236,7 +236,7 @@ run_model_default_smoke() {
     .env.ANTHROPIC_MODEL == "claude-opus-5-5[1m]" and
     .model == "opus[1m]" and
     (has("effortLevel") | not) and
-    .env.MODEL_REASONING_EFFORT == "high" and
+    .env.MODEL_REASONING_EFFORT == "xhigh" and
     .modelSettings["claude-opus-5-5"].effortLevel == "xhigh" and
     .modelSettings["claude-sonnet-5"].effortLevel == "high" and
     .modelPicker.replaceBuiltInOptions == true and
@@ -286,13 +286,13 @@ run_model_default_smoke() {
     return 1
   fi
 
-  # Copilot CLI: GPT-6 Astra at the 1M context tier and high effort. It declares
+  # Copilot CLI: GPT-6 Astra at the 1M context tier and xhigh effort. It declares
   # the Feature-Crew and mux-agents marketplaces itself, so install.sh updates them
   # rather than re-adding them, which would replace the settings link with a plain file.
   jq -e '
     .model == "gpt-6-astra" and
     .contextTier == "long_context" and
-    .effortLevel == "high" and
+    .effortLevel == "xhigh" and
     .enabledPlugins["feature-crew@feature-crew"] == true and
     .extraKnownMarketplaces["feature-crew"].source == {"source": "github", "repo": "D0n9X1n/feature-crew"} and
     .enabledPlugins["mux-agents@mux-agents"] == true and
@@ -312,8 +312,8 @@ run_model_default_smoke() {
   # Launcher wrappers inject the same defaults (settings.json can be rewritten
   # at runtime, so the flags are the authoritative per-launch pin).
   grep -Fq -- "--model 'claude-opus-5-5[1m]'" config/zsh/claude.zsh
-  grep -Fq -- "--model 'claude-opus-5-5[1m]' --effort high" config/zsh/cc.zsh
-  grep -Fq -- "--model gpt-6-astra --context long_context --effort high" config/zsh/gg.zsh
+  grep -Fq -- "--model 'claude-opus-5-5[1m]' --effort xhigh" config/zsh/cc.zsh
+  grep -Fq -- "--model gpt-6-astra --context long_context --effort xhigh" config/zsh/gg.zsh
   if grep -Fq 'gpt-6-astra' config/zsh/claude.zsh config/zsh/cc.zsh; then
     echo "Claude launchers must not pin a GPT model id" >&2
     return 1
@@ -341,8 +341,8 @@ SH
       *) echo "claude wrapper default lost the native Opus pin: $args" >&2; exit 1 ;;
     esac
     case "$args" in
-      *'--effort high'*) : ;;
-      *) echo "claude wrapper default lost --effort high: $args" >&2; exit 1 ;;
+      *'--effort xhigh'*) : ;;
+      *) echo "claude wrapper default lost --effort xhigh: $args" >&2; exit 1 ;;
     esac
     case "$args" in
       *'--permission-mode bypassPermissions'*) : ;;
@@ -353,7 +353,7 @@ SH
     PATH="$fake_bin:$PATH" CLAUDE_CAPTURE="$capture" \
       zsh -c 'source config/zsh/claude.zsh; claude --model sonnet'
     args="$(sed -n '1p' "$capture")"
-    if [ "$args" != "--permission-mode bypassPermissions --effort high --model sonnet" ]; then
+    if [ "$args" != "--permission-mode bypassPermissions --effort xhigh --model sonnet" ]; then
       echo "explicit --model was overridden or dropped the effort default: $args" >&2
       exit 1
     fi
@@ -362,7 +362,7 @@ SH
     PATH="$fake_bin:$PATH" CLAUDE_CAPTURE="$capture" \
       zsh -c 'source config/zsh/claude.zsh; claude --model=sonnet'
     args="$(sed -n '1p' "$capture")"
-    if [ "$args" != "--permission-mode bypassPermissions --effort high --model=sonnet" ]; then
+    if [ "$args" != "--permission-mode bypassPermissions --effort xhigh --model=sonnet" ]; then
       echo "explicit --model= was overridden or dropped the effort default: $args" >&2
       exit 1
     fi
@@ -372,7 +372,7 @@ SH
       zsh -c 'source config/zsh/claude.zsh; claude --effort low'
     args="$(sed -n '1p' "$capture")"
     case "$args" in
-      *'--effort high'*) echo "explicit --effort was overridden: $args" >&2; exit 1 ;;
+      *'--effort xhigh'*) echo "explicit --effort was overridden: $args" >&2; exit 1 ;;
     esac
     case "$args" in
       *'--effort low'*) : ;;
@@ -405,13 +405,13 @@ SH
     PATH="$fake_bin:$PATH" CLAUDE_CAPTURE="$capture" \
       zsh -c 'unset RMUX TMUX; source config/zsh/cc.zsh; cc model-smoke >/dev/null'
     args="$(sed -n '1p' "$capture")"
-    if [ "$args" != "--permission-mode bypassPermissions --model claude-opus-5-5[1m] --effort high" ]; then
-      echo "cc launcher lost the native model, high effort, or permission default: $args" >&2
+    if [ "$args" != "--permission-mode bypassPermissions --model claude-opus-5-5[1m] --effort xhigh" ]; then
+      echo "cc launcher lost the native model, xhigh effort, or permission default: $args" >&2
       exit 1
     fi
   )
 
-  echo "model defaults ok: Opus 5.5 by default (launchers high, saved xhigh); Sonnet, Haiku, and small-fast call GPT-6.2 Astra 1M directly"
+  echo "model defaults ok: Opus 5.5 at xhigh by default; Sonnet, Haiku, and small-fast call GPT-6.2 Astra 1M directly"
 }
 
 run_mcp_default_smoke() {
@@ -523,7 +523,7 @@ diff -u <(printf '%s\n' 'rmux|outer-color|0' --version) "$COPILOT_CAPTURE"
 unset RMUX TMUX
 gg terminal-smoke >/dev/null
 diff -u <(printf '%s\n' 'WezTerm|truecolor|3' --yolo \
-  --model gpt-6-astra --context long_context --effort high) "$COPILOT_CAPTURE"
+  --model gpt-6-astra --context long_context --effort xhigh) "$COPILOT_CAPTURE"
 [[ "$TERM_PROGRAM|$COLORTERM|$FORCE_COLOR" = 'rmux|outer-color|0' ]]
 [[ -z "${DISABLE_AUTO_TITLE:-}" ]]
 ZSH
@@ -560,7 +560,7 @@ run_global_instructions_smoke() {
     grep -Fq 'globally synced' "$file"
     grep -Fq 'repo-only' "$file"
     grep -Fq 'claude-opus-5-5[1m]' "$file"
-    grep -Fq '`claude-opus-5-5[1m]` at `high`' "$file"
+    grep -Fq '`claude-opus-5-5[1m]` at `xhigh`' "$file"
     grep -Fq 'Opus 5.5 and GPT-6.2 Astra' "$file"
     grep -Fq 'gpt-6.2-astra[1m]' "$file"
     grep -Fq 'gptModel' "$file"

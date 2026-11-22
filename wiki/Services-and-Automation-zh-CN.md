@@ -79,7 +79,7 @@ codexSetup: false
 
 在 zsh 中，Tab 可补全 copilot-relay 的命令、参数和已配置模型；请看 [SonicTerm 与 Shell](SonicTerm-and-Shell-zh-CN.md)。`install.sh`（以及 `uu`）会把 relay 保持在 npm 最新版本。
 
-不再使用 Codex。`codexSetup: false` 阻止 relay 修改 `~/.codex`。请保留这个键：relay 会把缺失的键按默认值 `true` 写回。`claudeSetup: false` 会阻止 relay 重写链接的 Claude settings。Relay 的 `thinkEffort` 回退值为 `xhigh`；Claude 保存的 Opus 偏好也使用 `xhigh`；启动器和状态栏回退值使用 `high`；客户端显式指定的 effort 仍优先。Copilot CLI 和 `gg` 保留独立的 Astra/`high` 默认值。模型路由和 relay effort 会热重载，无需重启；已有 shell 需要重新加载 Claude 启动器或打开新 shell。`upstreamTimeoutSeconds: 900` 允许单个 Claude 请求的上游 Copilot 调用最多等待十五分钟。
+不再使用 Codex。`codexSetup: false` 阻止 relay 修改 `~/.codex`。请保留这个键：relay 会把缺失的键按默认值 `true` 写回。`claudeSetup: false` 会阻止 relay 重写链接的 Claude settings。Relay 的 `thinkEffort` 回退值为 `xhigh`；Claude 保存的 Opus 偏好、启动器和状态栏回退值也使用 `xhigh`；客户端显式指定的 effort 仍优先。Copilot CLI 和 `gg` 保留独立的 Astra/`xhigh` 默认值。模型路由和 relay effort 会热重载，无需重启；已有 shell 需要重新加载 Claude 启动器或打开新 shell。`upstreamTimeoutSeconds: 900` 允许单个 Claude 请求的上游 Copilot 调用最多等待十五分钟。
 
 登录一次：
 
