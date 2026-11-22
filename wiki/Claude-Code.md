@@ -41,17 +41,17 @@ Other routes:
 
 | Claude-facing name | Relay lane | Upstream |
 |---|---|---|
-| `gpt-6-astra[1m]` (Sonnet, Haiku, small-fast, GPT picker row) | `gptModel` | `gpt-6-astra` |
+| `gpt-6.2-astra[1m]` (Sonnet, Haiku, small-fast, GPT picker row) | `gptModel` | `gpt-6.2-astra` |
 
-Opus keeps its native Anthropic id. Every other slot calls `gpt-6-astra[1m]` directly, so the client name already matches the upstream model and nothing needs remapping. The `/model` picker shows readable labels. The relay still sends any non-Opus name to `gptModel`.
+Opus keeps its native Anthropic id. Every other slot calls `gpt-6.2-astra[1m]` directly, so the client name already matches the upstream model and nothing needs remapping. The `/model` picker shows readable labels. The relay still sends any non-Opus name to `gptModel`.
 
-The `[1m]` suffix keeps Claude Code's one-million-token context accounting; the relay sends canonical `claude-opus-5.5` upstream without that suffix. Haiku and small-fast use `gpt-6-astra[1m]` too. Context accounting does not guarantee a full 1M-token conversation history; automatic compaction also depends on model and output budgets. Claude's saved Opus and Sonnet preferences, launchers, and status-line effort fallback use `high`, matching the relay's fallback in `config/copilot-relay/config.yaml`.
+The `[1m]` suffix keeps Claude Code's one-million-token context accounting; the relay sends canonical `claude-opus-5.5` upstream without that suffix. Haiku and small-fast use `gpt-6.2-astra[1m]` too. Context accounting does not guarantee a full 1M-token conversation history; automatic compaction also depends on model and output budgets. Claude's saved Opus preference uses `xhigh`; the saved Sonnet preference, launchers, and status-line effort fallback use `high`. The relay's fallback in `config/copilot-relay/config.yaml` is `xhigh`.
 
-The native Opus 5.5 identity is recognized by Claude Code 2.1.281. Update model and effort defaults in `config/claude/settings.json`, `config/zsh/claude.zsh`, and `config/zsh/cc.zsh` together; the wrappers' `--model` and `--effort` flags override saved settings. Keep relay `thinkEffort` aligned as the fallback for requests without effort. The separate `gptModel` stays `gpt-6-astra`, and the blank `webSearchBackend` still uses Astra.
+The native Opus 5.5 identity is recognized by Claude Code 2.1.281. Update model and effort defaults in `config/claude/settings.json`, `config/zsh/claude.zsh`, and `config/zsh/cc.zsh` together; the wrappers' `--model` and `--effort` flags override saved settings. Relay `thinkEffort` (`xhigh`) is the separate fallback for requests without effort. The separate `gptModel` stays `gpt-6.2-astra`, and the blank `webSearchBackend` still uses Astra.
 
 Run `copilot` and enter `/model` to check account availability and effort choices before changing models. That is Copilot's picker, not Claude Code's picker or the relay's local `/v1/models`. After `scripts/check.sh all` passes, apply through `./install.sh` twice and start a new shell and Claude Code session. The installer leaves a healthy relay running; recovery of an unhealthy relay may interrupt requests.
 
-Changing only `opusModel` does not select Opus at startup. `ANTHROPIC_MODEL`, the saved `opus[1m]` choice, `ANTHROPIC_DEFAULT_OPUS_MODEL`, and both launchers now agree on native Opus 5.5. Sonnet, Haiku, and small-fast call GPT-6 Astra directly; never point Opus at GPT. Relay route and effort changes hot-reload without a restart.
+Changing only `opusModel` does not select Opus at startup. `ANTHROPIC_MODEL`, the saved `opus[1m]` choice, `ANTHROPIC_DEFAULT_OPUS_MODEL`, and both launchers now agree on native Opus 5.5. Sonnet, Haiku, and small-fast call GPT-6.2 Astra directly; never point Opus at GPT. Relay route and effort changes hot-reload without a restart.
 
 [Upstream Opus 5.5 verification](https://github.com/D0n9X1n/copilot-relay/issues/81) found that automatic tool use works, but forced `tool_choice` values `tool` and `any` return HTTP 400. The relay preserves that error instead of silently switching to automatic selection.
 
@@ -65,11 +65,11 @@ Changing only `opusModel` does not select Opus at startup. `ANTHROPIC_MODEL`, th
 | `ANTHROPIC_AUTH_TOKEN` | local placeholder `dummy` |
 | `ANTHROPIC_MODEL` | `claude-opus-5-5[1m]` |
 | `ANTHROPIC_DEFAULT_OPUS_MODEL` | `claude-opus-5-5[1m]`; resolves the native Opus alias |
-| `ANTHROPIC_DEFAULT_SONNET_MODEL` | `gpt-6-astra[1m]` |
-| `ANTHROPIC_DEFAULT_HAIKU_MODEL` | `gpt-6-astra[1m]` |
-| `ANTHROPIC_SMALL_FAST_MODEL` | `gpt-6-astra[1m]` |
+| `ANTHROPIC_DEFAULT_SONNET_MODEL` | `gpt-6.2-astra[1m]` |
+| `ANTHROPIC_DEFAULT_HAIKU_MODEL` | `gpt-6.2-astra[1m]` |
+| `ANTHROPIC_SMALL_FAST_MODEL` | `gpt-6.2-astra[1m]` |
 | `model` | `opus[1m]`; the picker's native alias |
-| `modelPicker` | only `Opus 5.5 (1M context)` and `GPT-6 Astra (1M context)`; replaces the built-in list |
+| `modelPicker` | only `Opus 5.5 (1M context)` and `GPT-6.2 Astra (1M context)`; replaces the built-in list |
 | `modelSettings.claude-opus-5-5.effortLevel` | `high`; Opus 5.5's saved effort preference |
 | `modelSettings.claude-sonnet-5.effortLevel` | `high`; Sonnet 5's saved effort preference |
 | `MODEL_REASONING_EFFORT` | `high`; status-line fallback aligned with the launchers' `--effort high` |
@@ -88,7 +88,7 @@ Changing only `opusModel` does not select Opus at startup. `ANTHROPIC_MODEL`, th
 | `cleanupPeriodDays` | `7`; delete session transcripts after 7 days of inactivity to save disk space (default 30) |
 | `CLAUDE_CODE_AUTO_MODE_SERVER` | `"0"`; auto mode uses classifier requests from Claude Code itself instead of server-side review. Permission checks stay on |
 
-`refreshInterval` belongs inside `statusLine`. The saved Opus and Sonnet preferences both use `high`. `MODEL_REASONING_EFFORT` is a status-line fallback, not an API effort control. The launchers pass `--effort high`; an explicit effort on the `claude` command overrides it. No top-level `effortLevel` is managed. [Copilot CLI](Copilot-CLI.md) keeps its separate Astra/`high` defaults.
+`refreshInterval` belongs inside `statusLine`. The saved Opus preference uses `xhigh`; the saved Sonnet preference uses `high`. `MODEL_REASONING_EFFORT` is a status-line fallback, not an API effort control. The launchers pass `--effort high`; an explicit effort on the `claude` command overrides it. No top-level `effortLevel` is managed. [Copilot CLI](Copilot-CLI.md) keeps its separate Astra/`high` defaults.
 
 ### Model picker
 
@@ -97,7 +97,7 @@ Changing only `opusModel` does not select Opus at startup. `ANTHROPIC_MODEL`, th
 | Row | Model | Description |
 |---|---|---|
 | Opus 5.5 (1M context) | `opus[1m]` | Most capable for ambitious work |
-| GPT-6 Astra (1M context) | `gpt-6-astra[1m]` | GPT-6 Astra through copilot-relay |
+| GPT-6.2 Astra (1M context) | `gpt-6.2-astra[1m]` | GPT-6.2 Astra through copilot-relay |
 
 `modelPicker.replaceBuiltInOptions` hides the built-in rows, including Haiku and `opusplan`. Claude Code always adds a **Default** row; it resolves to Opus 5.5 and cannot be hidden. The GPT row sets `behavesAs: claude-sonnet-5`, so Claude Code treats it like Sonnet 5 for effort and 1M context.
 
@@ -127,6 +127,8 @@ Do not put the local state file in Git.
 `config/claude/CLAUDE.md` installs as `~/.claude/CLAUDE.md` and sets user-wide response style. Conversational prose is direct and concise by default. Requests for more detail still win, and code, commands, findings, evidence, caveats, safety information, and technical precision stay complete.
 
 The global file holds only reusable behavior plus one conditional pointer: these settings are synced from `~/Public/dot-configs`, and a change to them starts by reading that folder's `.claude/CLAUDE.md`. Repo-only rules — the Wiki source of truth, the manifest, checks, bilingual pages — stay in this repo's own `.claude/CLAUDE.md`, so an unrelated project never loads them.
+
+When a goal or task ends, the global rules require cleanup of every build and temporary file the work created, even without a PR, including files outside the repo. Task-owned background processes that are no longer needed stop too. Tracked files, user files, shared caches, and anything with an unclear owner stay; the agent reports what it removed and kept.
 
 After a PR merges, the global rules require local cleanup before the task is called complete: confirm the merge, remove clean inactive PR worktrees and local branches, prune stale references, remove task-created temporary files, and stop unneeded task-owned processes. Preserve uncommitted or unmerged work, stashes, active sessions and locks, unrelated files, and shared processes. Verify the final state and report anything kept. This is an agent instruction, not an unattended merge hook.
 
@@ -220,7 +222,7 @@ The first prompt was answered no. In local `~/.claude.json`, move `dummy` from `
 
 ### Small jobs get `model_not_supported`
 
-Keep the Haiku and small-fast aliases set to `gpt-6-astra[1m]`, the same model as the GPT picker row. Check that `gptModel` is still `gpt-6-astra` and that the relay base URL is right.
+Keep the Haiku and small-fast aliases set to `gpt-6.2-astra[1m]`, the same model as the GPT picker row. Check that `gptModel` is still `gpt-6.2-astra` and that the relay base URL is right.
 
 ### Relay rewrites settings
 

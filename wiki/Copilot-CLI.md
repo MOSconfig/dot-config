@@ -36,6 +36,8 @@ The file holds reusable behavior and a conditional pointer to `~/Public/dot-conf
 
 No duplicate global `AGENTS.md` or shell-injected instruction directory is needed. Any user-supplied `COPILOT_CUSTOM_INSTRUCTIONS_DIRS` value stays untouched.
 
+When a goal or task ends, the global rules require cleanup of every build and temporary file the work created, even without a PR, including files outside the repo. Task-owned background processes that are no longer needed stop too. Tracked files, user files, shared caches, and anything with an unclear owner stay; the agent reports what it removed and kept.
+
 After a PR merges, the global rules require local cleanup before the task is called complete: confirm the merge, remove clean inactive PR worktrees and local branches, prune stale references, remove task-created temporary files, and stop unneeded task-owned processes. Preserve uncommitted or unmerged work, stashes, active sessions and locks, unrelated files, and shared processes. Verify the final state and report anything kept. This is an agent instruction, not an unattended merge hook.
 
 ## GitHub access

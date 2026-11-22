@@ -65,21 +65,21 @@ Important values:
 
 ```yaml
 claudeSetup: false
-thinkEffort: high
+thinkEffort: xhigh
 upstreamTimeoutSeconds: 900
-gptModel: gpt-6-astra
+gptModel: gpt-6.2-astra
 opusModel: claude-opus-5.5
 claudeUpstreamApi: chat-completions
 codexSetup: false
 ```
 
-`opusModel` uses the canonical upstream ID without `[1m]`. Claude starts with native `claude-opus-5-5[1m]` and routes to Opus 5.5. Sonnet, Haiku, and small-fast call `gpt-6-astra[1m]` directly, and the blank WebSearch backend uses Astra. See [Claude Code](Claude-Code.md) for the Opus tool-selection limit.
+`opusModel` uses the canonical upstream ID without `[1m]`. Claude starts with native `claude-opus-5-5[1m]` and routes to Opus 5.5. Sonnet, Haiku, and small-fast call `gpt-6.2-astra[1m]` directly, and the blank WebSearch backend uses Astra. See [Claude Code](Claude-Code.md) for the Opus tool-selection limit.
 
 `claudeUpstreamApi: chat-completions` keeps Claude requests on Copilot's chat-completions API. It is copilot-relay 0.4.0's default, written out so the tracked file matches the relay's own template. `auto` or `messages` would use Copilot's native Messages API instead.
 
 Tab completes copilot-relay commands, flags, and configured models in zsh; see [SonicTerm and shell](SonicTerm-and-Shell.md). `install.sh`, and so `uu`, keeps the relay at the latest npm version.
 
-Codex is not used. `codexSetup: false` stops the relay from editing `~/.codex`. Keep the key: the relay writes a missing key back with its default, `true`. `claudeSetup: false` stops the relay from rewriting the linked Claude settings. The relay's `thinkEffort` fallback and Claude's saved Opus preference, launchers, and status-line fallback use `high`. Explicit client effort still takes precedence. Copilot CLI and `gg` retain their separate Astra/`high` defaults. Model routes and relay effort hot-reload without a restart; existing shells need their Claude launchers reloaded or a new shell. `upstreamTimeoutSeconds: 900` allows up to fifteen minutes for a single Claude request's upstream Copilot calls.
+Codex is not used. `codexSetup: false` stops the relay from editing `~/.codex`. Keep the key: the relay writes a missing key back with its default, `true`. `claudeSetup: false` stops the relay from rewriting the linked Claude settings. The relay's `thinkEffort` fallback is `xhigh`; Claude's saved Opus preference also uses `xhigh`; launchers and the status-line fallback use `high`. Explicit client effort still takes precedence. Copilot CLI and `gg` retain their separate Astra/`high` defaults. Model routes and relay effort hot-reload without a restart; existing shells need their Claude launchers reloaded or a new shell. `upstreamTimeoutSeconds: 900` allows up to fifteen minutes for a single Claude request's upstream Copilot calls.
 
 Login once:
 
@@ -92,7 +92,7 @@ Auth and logs stay local under `~/.copilot-relay/`.
 
 ### Claude app
 
-The Claude app (third-party mode, `~/Library/Application Support/Claude-3p/`) uses the relay as its gateway with two models: Claude Opus 5.5 (`claude-opus-5.5`) and GPT-6 Astra, listed under the route name `claude-sonnet-relay`. The app rejects a model name that looks like another vendor's, such as `gpt-6-astra`, and flags a bare alias such as `sonnet` while model discovery is off, so GPT-6 Astra uses that Claude-style route; the relay sends every name without "opus" to `gptModel`.
+The Claude app (third-party mode, `~/Library/Application Support/Claude-3p/`) uses the relay as its gateway with two models: Claude Opus 5.5 (`claude-opus-5.5`) and GPT-6.2 Astra, listed under the route name `claude-sonnet-relay`. The app rejects a model name that looks like another vendor's, such as `gpt-6.2-astra`, and flags a bare alias such as `sonnet` while model discovery is off, so GPT-6.2 Astra uses that Claude-style route; the relay sends every name without "opus" to `gptModel`.
 
 That config is not tracked here: it holds the gateway key and a per-machine file name. Restore it from the relay's settings instead. Quit the app first, because it rewrites these files while it runs:
 

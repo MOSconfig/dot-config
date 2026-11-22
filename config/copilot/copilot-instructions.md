@@ -14,6 +14,13 @@
 - Run tools and commands without asking for approval.
 - Work on the task directly.
 
+## When a goal or task ends
+
+- Clean up every build and temporary file the work created, even when no PR is involved: build outputs, caches, scratch files, logs, and temp directories, including those outside the repo.
+- Stop task-owned background processes that are no longer needed.
+- Keep tracked files, user files, shared caches, and anything whose owner is unclear. Never run broad cleanup commands; ask when unsure.
+- Report what was removed and anything kept, with the reason.
+
 ## After a PR merges
 
 - Treat post-merge local cleanup as part of finishing the task, not an optional follow-up.

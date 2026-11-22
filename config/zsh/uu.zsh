@@ -1,8 +1,8 @@
-# uu [--all]
+# uu [--firefox]
 #
 # Update this machine from dot-configs: fast-forward the checkout to its
 # upstream branch, then run ./install.sh to apply the synced settings.
-# Options pass through to install.sh; --all also sets up Firefox.
+# Options pass through to install.sh; --firefox also sets up Firefox.
 #
 # Notes:
 # - The checkout is found through this file's installed link, so a clone in

@@ -5,9 +5,9 @@
     "ANTHROPIC_AUTH_TOKEN": "dummy",
     "ANTHROPIC_MODEL": "claude-opus-5-5[1m]",
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5-5[1m]",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "gpt-6-astra[1m]",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-6-astra[1m]",
-    "ANTHROPIC_SMALL_FAST_MODEL": "gpt-6-astra[1m]",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "gpt-6.2-astra[1m]",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-6.2-astra[1m]",
+    "ANTHROPIC_SMALL_FAST_MODEL": "gpt-6.2-astra[1m]",
     "MODEL_REASONING_EFFORT": "high",
     "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "100",
     "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS": "16",
@@ -29,9 +29,9 @@
         "description": "Most capable for ambitious work"
       },
       {
-        "model": "gpt-6-astra[1m]",
-        "label": "GPT-6 Astra (1M context)",
-        "description": "GPT-6 Astra through copilot-relay",
+        "model": "gpt-6.2-astra[1m]",
+        "label": "GPT-6.2 Astra (1M context)",
+        "description": "GPT-6.2 Astra through copilot-relay",
         "behavesAs": "claude-sonnet-5"
       }
     ],
@@ -101,7 +101,7 @@
       "effortLevel": "high"
     },
     "claude-opus-5-5": {
-      "effortLevel": "high"
+      "effortLevel": "xhigh"
     }
   },
   "autoCompactWindow": 770000,
