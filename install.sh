@@ -1101,7 +1101,7 @@ herdr_tui_state() { printf '%s\n' "${HOME}/.local/state/dot-configs/herdr"; }
 herdr_tui_generate() {
   local theme="$1" out="$2" colors
   # \A and \z: a value with a trailing newline is not a color.
-  colors="$(jq -er '[.colors.accent, .colors.chrome, .colors.surface, .colors.selected, .colors.hover,
+  colors="$(jq -ers 'if length != 1 then error("one document") else .[0] end | [.colors.accent, .colors.chrome, .colors.surface, .colors.selected, .colors.hover,
       .colors.dim, .colors.muted, .colors.foreground, .colors.done, .colors.working, .colors.blocked,
       .ansi[4], .ansi[5], .ansi[6]]
     | if all(type == "string" and test("\\A#[0-9a-fA-F]{6}\\z")) then join(" ") else error("bad color") end' \
@@ -1177,6 +1177,7 @@ herdr_tui_install() {
   fi
   if cmp -s "$tmp" "$file"; then
     rm -f "$tmp"
+    chmod 644 "$file" 2>/dev/null
   elif mv -f "$tmp" "$file"; then
     changed=1
   else
@@ -1192,6 +1193,10 @@ herdr_tui_install() {
     echo "Linked $dest to the Apollo Herdr TUI config."
   fi
   [ "$made" = 1 ] || [ "$changed" = 1 ] || return 0
+  # DEST may have changed while this ran; check and reload only our own link.
+  if [ ! -L "$dest" ] || [ "$(readlink -n "$dest"; echo x)" != "$file"x ]; then
+    echo "Warning: $dest changed during install; the running Herdr was not reloaded." >&2; return 0
+  fi
   have_cmd herdr || return 0
   if ! HERDR_CONFIG_PATH="$dest" herdr config check >/dev/null 2>&1; then
     echo "Warning: herdr config check failed for $dest; the running Herdr was not reloaded." >&2; return 0
@@ -1580,11 +1585,12 @@ copy_dest_ok() {
 home_path_physical() {
   local a="$1" hp ap
   case "$a" in "$HOME"|"$HOME"/*) ;; *) return 1 ;; esac
-  hp="$(cd "$HOME" 2>/dev/null && pwd -P)" || return 1
-  while [ ! -e "$a" ] && [ ! -L "$a" ]; do a="$(dirname "$a")"; done
+  # The x keeps a trailing newline in a folder name, which $( ) would strip.
+  hp="$(cd "$HOME" 2>/dev/null && pwd -P && echo x)" || return 1
+  while [ ! -e "$a" ] && [ ! -L "$a" ]; do a="$(dirname "$a"; echo x)"; a="${a%$'\n'x}"; done
   [ -d "$a" ] || return 1
-  ap="$(cd "$a" 2>/dev/null && pwd -P)" || return 1
-  [ "$ap" = "$hp${a#"$HOME"}" ]
+  ap="$(cd "$a" 2>/dev/null && pwd -P && echo x)" || return 1
+  [ "${ap%$'\n'x}" = "${hp%$'\n'x}${a#"$HOME"}" ]
 }
 
 copy_file() {

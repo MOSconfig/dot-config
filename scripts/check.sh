@@ -3992,8 +3992,9 @@ assert set(cfg) == {"onboarding", "ui", "theme"} and set(cfg["theme"]) == {"name
 PYT
   sed -n '/^herdr_tui_generate()/,/^}/p' install.sh | grep -Eiq '#[0-9a-f]{3,8}\b' && fail "the generator holds a color literal"
   printf 'keep\n' >"$t/gen/config.toml"
-  for bad in missing word newline; do
+  for bad in missing word newline multi; do
     case "$bad" in
+      multi) { echo '{}'; cat "$theme"; } ;;
       missing) jq 'del(.colors.hover)' "$theme" ;;
       word) jq '.colors.hover = "grey"' "$theme" ;;
       newline) jq '.colors.hover = "#112233\n"' "$theme" ;;
@@ -4071,6 +4072,25 @@ PYT
     [ ! -s "$HERDR_STUB_LOG" ] || fail "$kind: called herdr"
     rm -f "$t/target.toml"
   done
+
+  # (4c) A linked folder whose physical path differs only by a trailing newline is still a link.
+  fresh; mkdir -p "$HOME/.local/state/dot-configs/herdr"$'\n' "$HOME/.config"
+  ln -s "$HOME/.local/state/dot-configs/herdr"$'\n' "$S"
+  out="$(herdr_tui_install 2>&1)"
+  [ ! -e "$HOME/.local/state/dot-configs/herdr"$'\n'/config.toml ] && [ ! -e "$D" ] && [ ! -L "$D" ] && [ "$(warnings "$out")" = 1 ] \
+    || fail "a newline-named link target was accepted: $out"
+  [ ! -s "$HERDR_STUB_LOG" ] || fail "newline alias: called herdr"
+  # (4d) DEST turns into a foreign link while install runs: no herdr call, one warning, the link stays.
+  fresh
+  mv() { command mv "$@"; mkdir -p "$L"; command ln -s "$t/foreign.toml" "$D"; }
+  out="$(herdr_tui_install 2>&1)"; unset -f mv
+  [ "$(readlink "$D")" = "$t/foreign.toml" ] && [ ! -s "$HERDR_STUB_LOG" ] && [ "$(warnings "$out")" = 1 ] \
+    || fail "a DEST that changed during install was checked or reloaded: $(calls) / $out"
+  # (4e) An unchanged state file converges to 0644.
+  fresh; herdr_tui_install >/dev/null 2>&1; chmod 666 "$F"; : >"$HERDR_STUB_LOG"
+  herdr_tui_install >/dev/null 2>&1
+  [ "$(stat -f '%Lp' "$F" 2>/dev/null || stat -c '%a' "$F")" = 644 ] || fail "an unchanged state file kept mode $(stat -f '%Lp' "$F")"
+  [ ! -s "$HERDR_STUB_LOG" ] || fail "a mode-only fix reloaded Herdr"
 
   # (4b) A symlinked $HOME is the trusted anchor: the TUI installs, and a copy row under a
   # fresh home is still accepted (copy_dest_ok behavior unchanged).
