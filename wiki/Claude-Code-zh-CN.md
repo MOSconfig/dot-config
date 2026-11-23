@@ -29,8 +29,8 @@ Claude Code 第一次启动时会问是否允许自定义 `dummy` API key。请�
 ```text
 Claude 端名称： claude-opus-5-5[1m]
 Picker 别名：   opus[1m]
-Opus 保存偏好： high
-启动器 effort： high
+Opus 保存偏好： xhigh
+启动器 effort： xhigh
 Relay 路由：    opusModel
 上游模型：      claude-opus-5.5
 ```

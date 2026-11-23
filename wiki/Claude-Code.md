@@ -29,8 +29,8 @@ The tracked default is:
 ```text
 Claude-facing name: claude-opus-5-5[1m]
 Picker alias:       opus[1m]
-Saved Opus effort:  high
-Launcher effort:    high
+Saved Opus effort:  xhigh
+Launcher effort:    xhigh
 Relay route:        opusModel
 Upstream model:     claude-opus-5.5
 ```

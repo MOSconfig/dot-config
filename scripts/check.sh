@@ -314,6 +314,11 @@ run_model_default_smoke() {
   grep -Fq -- "--model 'claude-opus-5-5[1m]'" config/zsh/claude.zsh
   grep -Fq -- "--model 'claude-opus-5-5[1m]' --effort xhigh" config/zsh/cc.zsh
   grep -Fq -- "--model gpt-6-astra --context long_context --effort xhigh" config/zsh/gg.zsh
+  # The Wiki's tracked-default summary names the same effort, in both languages.
+  grep -Eq '^Saved Opus effort: +xhigh$' wiki/Claude-Code.md
+  grep -Eq '^Launcher effort: +xhigh$' wiki/Claude-Code.md
+  grep -Eq '^Opus 保存偏好： +xhigh$' wiki/Claude-Code-zh-CN.md
+  grep -Eq '^启动器 effort： +xhigh$' wiki/Claude-Code-zh-CN.md
   if grep -Fq 'gpt-6-astra' config/zsh/claude.zsh config/zsh/cc.zsh; then
     echo "Claude launchers must not pin a GPT model id" >&2
     return 1
