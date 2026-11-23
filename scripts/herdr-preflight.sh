@@ -83,6 +83,21 @@ while IFS=$'\t' read -r type src t; do
   fi
 done < <(targets)
 
+# The Herdr TUI config: install links it only when it is missing and never replaces or writes through
+# anything else (see herdr_tui_install), so only a folder there is refused. Its live folder, state
+# folder and state file are journaled too, so a rollback can remove what install created.
+t="$HOME/.config/herdr/config.toml"
+printf '%s\n' "$HOME/.config/herdr" "$t" "$HOME/.local/state/dot-configs/herdr" "$HOME/.local/state/dot-configs/herdr/config.toml" >>"$journal"
+if [ -L "$t" ]; then
+  echo "link: $t -> $(readlink "$t")"
+elif [ -d "$t" ]; then
+  no "folder at the Herdr TUI config: $t"
+elif [ -e "$t" ]; then
+  echo "keep: $t (install leaves an existing Herdr config)"
+else
+  echo "create: $t"
+fi
+
 # Not journaled: the Dock icon (a Finder custom icon on Apollo.app's bundle root), which install sets
 # only when missing; scripts/set-app-icon.sh --remove takes it off.
 if app="$(apollo_app_path 2>/dev/null)"; then echo "dock icon: may set the Apollo icon on $app (not journaled)"; fi

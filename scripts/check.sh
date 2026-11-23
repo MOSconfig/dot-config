@@ -1224,12 +1224,12 @@ PY
     echo "workflows: $checkouts checkouts but $subs with submodules: true" >&2
     return 1
   }
-  for f in run_herdr_smoke run_herdr_copy_smoke run_herdr_install_smoke run_herdr_seed_smoke run_herdr_adopt_smoke run_herdr_copy_boundary_smoke run_herdr_link_fail_smoke run_herdr_app_smoke run_herdr_preflight_smoke; do
+  for f in run_herdr_smoke run_herdr_copy_smoke run_herdr_install_smoke run_herdr_seed_smoke run_herdr_adopt_smoke run_herdr_copy_boundary_smoke run_herdr_link_fail_smoke run_herdr_app_smoke run_herdr_tui_smoke run_herdr_preflight_smoke; do
     declare -f run_smoke | grep -qw "$f" || { echo "run_smoke does not call $f" >&2; return 1; }
   done
   declare -f run_shellcheck | grep -q "config/herdr" || { echo "run_shellcheck does not prune config/herdr" >&2; return 1; }
   # Every Herdr step in install.sh's main runs through herdr_step, so a failure only warns.
-  for f in herdr_install_prepare copy_manifest_files herdr_install_report apollo_dock_icon; do
+  for f in herdr_install_prepare copy_manifest_files herdr_install_report apollo_dock_icon herdr_tui_install; do
     grep -qx "herdr_step $f" install.sh || { echo "install.sh does not run $f through herdr_step" >&2; return 1; }
   done
   # Apollo.app replaced Herdr.app: install never installs Herdr again.
@@ -3945,6 +3945,221 @@ run_herdr_app_smoke() (
   echo "herdr app: ok"
 )
 
+# Herdr TUI (~/.config/herdr/config.toml): generated from the theme the Herdr app
+# uses, linked only where nothing else is, never written through a link or alias.
+run_herdr_tui_smoke() (
+  set -euo pipefail
+  local t out ino L D S F want
+  t="$(mktemp -d)"
+  [ -n "$t" ] && [ -d "$t" ] || exit 1
+  trap 'rm -rf "$t"' EXIT
+  fail() { echo "herdr tui: $*" >&2; exit 1; }
+  DOT_CONFIGS_INSTALL_LIB_ONLY=1 source install.sh
+  real_repo="$repo_root"
+  repo_root="$t/repo"; mkdir -p "$repo_root/config/herdr/themes"
+  cp "$real_repo/config/herdr/themes/apollo.json" "$repo_root/config/herdr/themes/apollo.json"
+  theme="$repo_root/config/herdr/themes/apollo.json"
+  mkdir -p "$t/bin"
+  stub() { printf '%s\n' '#!/usr/bin/env bash' 'printf "%s|%s\n" "${HERDR_CONFIG_PATH:-}" "$*" >>"$HERDR_STUB_LOG"' "$@" >"$t/bin/herdr"; chmod +x "$t/bin/herdr"; }
+  export PATH="$t/bin:$PATH" HERDR_STUB_LOG="$t/herdr.log"
+  unset HERDR_CONFIG_PATH
+  fresh() { rm -rf "$t/home"; mkdir -p "$t/home"; export HOME="$t/home"
+    L="$HOME/.config/herdr"; D="$L/config.toml"; S="$HOME/.local/state/dot-configs/herdr"; F="$S/config.toml"
+    stub; : >"$HERDR_STUB_LOG"; }
+  calls() { cat "$HERDR_STUB_LOG"; }
+  warnings() { grep -c '^Warning:' <<<"$1" || true; }
+
+  # (1) The generator: colors come from the app theme, nothing else; strict hex.
+  fresh; mkdir -p "$t/gen"
+  herdr_tui_generate "$theme" "$t/gen/config.toml" || fail "the generator failed on the app theme"
+  python3 -I - "$t/gen/config.toml" "$theme" <<'PYT'
+import json, re, sys, tomllib
+cfg = tomllib.load(open(sys.argv[1], "rb"))
+th = json.load(open(sys.argv[2]))
+c, a = th["colors"], th["ansi"]
+want = {"accent": c["accent"], "panel_bg": c["chrome"], "sidebar_bg": c["chrome"],
+        "active_row_bg": c["surface"], "selection_bg": c["selected"], "surface0": c["selected"],
+        "surface1": c["hover"], "surface_dim": c["surface"], "overlay0": c["dim"], "overlay1": c["muted"],
+        "text": c["foreground"], "subtext0": c["muted"], "mauve": a[5], "green": c["done"],
+        "yellow": c["working"], "peach": c["accent"], "red": c["blocked"], "blue": a[4], "teal": a[6]}
+assert cfg["theme"]["custom"] == want, (cfg["theme"]["custom"], want)
+assert cfg["onboarding"] is False
+assert cfg["theme"]["name"] == "gruvbox" and cfg["theme"]["auto_switch"] is False
+ui = cfg["ui"]
+assert ui == {"status_indicators": "symbols", "tab_bar_position": "bottom", "pane_outer_borders": False,
+              "pane_gaps": False, "tab_bar_right": [{"type": "zoom"}, {"type": "datetime", "format": "%H:%M"}]}, ui
+assert set(cfg) == {"onboarding", "ui", "theme"} and set(cfg["theme"]) == {"name", "auto_switch", "custom"}
+PYT
+  sed -n '/^herdr_tui_generate()/,/^}/p' install.sh | grep -Eiq '#[0-9a-f]{3,8}\b' && fail "the generator holds a color literal"
+  printf 'keep\n' >"$t/gen/config.toml"
+  for bad in missing word newline multi; do
+    case "$bad" in
+      multi) { echo '{}'; cat "$theme"; } ;;
+      missing) jq 'del(.colors.hover)' "$theme" ;;
+      word) jq '.colors.hover = "grey"' "$theme" ;;
+      newline) jq '.colors.hover = "#112233\n"' "$theme" ;;
+    esac >"$t/bad.json"
+    ! herdr_tui_generate "$t/bad.json" "$t/gen/config.toml" 2>/dev/null || fail "the generator accepted a $bad color"
+    [ "$(cat "$t/gen/config.toml")" = keep ] || fail "a failed generation ($bad) changed the output"
+  done
+
+  # (2) A fresh install: state file + link, checked then reloaded; a rerun calls herdr zero times.
+  fresh
+  out="$(herdr_tui_install 2>&1)" || fail "install failed: $out"
+  [ -f "$F" ] && [ ! -L "$F" ] && [ "$(readlink "$D")" = "$F" ] || fail "fresh install did not link $D to $F"
+  [ "$(stat -f '%Lp' "$F" 2>/dev/null || stat -c '%a' "$F")" = 644 ] || fail "the state file is not 0644"
+  [ "$(calls)" = "$D|config check"$'\n'"|server reload-config" ] || fail "fresh install calls: $(calls)"
+  : >"$HERDR_STUB_LOG"; ino="$(ls -i "$F" | awk '{print $1}')"
+  out="$(herdr_tui_install 2>&1)"
+  [ ! -s "$HERDR_STUB_LOG" ] && [ -z "$out" ] && [ "$(ls -i "$F" | awk '{print $1}')" = "$ino" ] \
+    || fail "an unchanged rerun rewrote, reloaded or printed: $out $(calls)"
+  # A theme change regenerates and reloads through the same link.
+  jq '.colors.hover = "#010203"' "$theme" >"$t/th" && mv "$t/th" "$theme"
+  : >"$HERDR_STUB_LOG"; herdr_tui_install >/dev/null 2>&1
+  grep -q '"#010203"' "$F" && [ "$(wc -l <"$HERDR_STUB_LOG" | tr -d ' ')" = 2 ] || fail "a theme change was not applied: $(calls)"
+  cp "$real_repo/config/herdr/themes/apollo.json" "$theme"
+
+  # (3) Anything already at DEST is kept byte for byte, one warning, zero herdr calls, no state written.
+  for kind in file comments fifo foreign relative newline folder; do
+    fresh; mkdir -p "$L"
+    case "$kind" in
+      file) printf 'onboarding = false\n[ui]\nstatus_indicators = "symbols"\n' >"$D" ;;
+      comments) printf '# my keys\n' >"$D" ;;
+      fifo) mkfifo "$D" ;;
+      foreign) ln -s "$t/elsewhere.toml" "$D" ;;
+      relative) mkdir -p "$S"; printf 'mine = true\n' >"$F"; ln -s ../../.local/state/dot-configs/herdr/config.toml "$D" ;;
+      newline) mkdir -p "$S"; printf 'mine = true\n' >"$F"
+        # macOS ln drops a trailing newline from the target; os.symlink keeps it.
+        python3 -I -c 'import os, sys; os.symlink(sys.argv[1] + "\n", sys.argv[2])' "$F" "$D" ;;
+      folder) mkdir "$D" ;;
+    esac
+    [ -f "$D" ] && cat "$D" >"$t/before" || : >"$t/before"
+    out="$(herdr_tui_install 2>&1)" || fail "$kind: install failed"
+    case "$kind" in
+      file|comments) [ -f "$D" ] && [ ! -L "$D" ] && cmp -s "$D" "$t/before" ;;
+      fifo) [ -p "$D" ] ;;
+      foreign) [ "$(readlink "$D")" = "$t/elsewhere.toml" ] ;;
+      relative) [ "$(readlink "$D")" = ../../.local/state/dot-configs/herdr/config.toml ] && [ "$(cat "$F")" = 'mine = true' ] ;;
+      newline) [ "$(readlink -n "$D"; echo x)" = "$F"$'\n'x ] && [ "$(cat "$F")" = 'mine = true' ] ;;
+      folder) [ -d "$D" ] && [ -z "$(ls -A "$D")" ] ;;
+    esac || fail "$kind: DEST or its target changed"
+    [ "$(warnings "$out")" = 1 ] && grep -q "kept $D" <<<"$out" || fail "$kind: expected one kept warning: $out"
+    [ ! -s "$HERDR_STUB_LOG" ] || fail "$kind: called herdr"
+    case "$kind" in relative|newline) ;; *) [ ! -e "$F" ] || fail "$kind: wrote the state file" ;; esac
+  done
+
+  # (4) Aliased folders: the user's bytes survive, one warning, no state, no herdr call.
+  for kind in live-to-state state-to-live dangling-live config-to-state state-file-link state-file-folder; do
+    fresh
+    case "$kind" in
+      live-to-state) mkdir -p "$S" "$HOME/.config"; printf 'mine = 1\n' >"$S/config.toml"; ln -s "$S" "$L" ;;
+      state-to-live) mkdir -p "$L" "$(dirname "$S")"; printf 'mine = 1\n' >"$D"; ln -s "$L" "$S" ;;
+      dangling-live) mkdir -p "$HOME/.config"; ln -s "$S" "$L" ;;
+      config-to-state) mkdir -p "$HOME/.local/state/dot-configs/herdr"; printf 'mine = 1\n' >"$HOME/.local/state/dot-configs/herdr/config.toml"
+        ln -s "$HOME/.local/state/dot-configs" "$HOME/.config" ;;
+      state-file-link) mkdir -p "$S" "$L"; ln -s "$t/target.toml" "$F"; printf 'mine = 1\n' >"$t/target.toml" ;;
+      state-file-folder) mkdir -p "$F" "$L" ;;
+    esac
+    { find "$HOME" -print; [ ! -e "$t/target.toml" ] || echo "$t/target.toml"; } | LC_ALL=C sort | while IFS= read -r p; do
+      if [ -L "$p" ]; then echo "L $p $(readlink "$p")"; elif [ -f "$p" ]; then echo "F $p $(cat "$p")"; else echo "D $p"; fi
+    done >"$t/tree.before"
+    out="$(herdr_tui_install 2>&1)" || fail "$kind: install failed"
+    { find "$HOME" -print; [ ! -e "$t/target.toml" ] || echo "$t/target.toml"; } | LC_ALL=C sort | while IFS= read -r p; do
+      if [ -L "$p" ]; then echo "L $p $(readlink "$p")"; elif [ -f "$p" ]; then echo "F $p $(cat "$p")"; else echo "D $p"; fi
+    done >"$t/tree.after"
+    cmp -s "$t/tree.before" "$t/tree.after" || fail "$kind: HOME changed: $(diff "$t/tree.before" "$t/tree.after")"
+    [ "$(warnings "$out")" = 1 ] || fail "$kind: expected one warning: $out"
+    [ ! -s "$HERDR_STUB_LOG" ] || fail "$kind: called herdr"
+    rm -f "$t/target.toml"
+  done
+
+  # (4c) A linked folder whose physical path differs only by a trailing newline is still a link.
+  fresh; mkdir -p "$HOME/.local/state/dot-configs/herdr"$'\n' "$HOME/.config"
+  ln -s "$HOME/.local/state/dot-configs/herdr"$'\n' "$S"
+  out="$(herdr_tui_install 2>&1)"
+  [ ! -e "$HOME/.local/state/dot-configs/herdr"$'\n'/config.toml ] && [ ! -e "$D" ] && [ ! -L "$D" ] && [ "$(warnings "$out")" = 1 ] \
+    || fail "a newline-named link target was accepted: $out"
+  [ ! -s "$HERDR_STUB_LOG" ] || fail "newline alias: called herdr"
+  # (4d) DEST turns into a foreign link while install runs: no herdr call, one warning, the link stays.
+  fresh
+  mv() { command mv "$@"; mkdir -p "$L"; command ln -s "$t/foreign.toml" "$D"; }
+  out="$(herdr_tui_install 2>&1)"; unset -f mv
+  [ "$(readlink "$D")" = "$t/foreign.toml" ] && [ ! -s "$HERDR_STUB_LOG" ] && [ "$(warnings "$out")" = 1 ] \
+    || fail "a DEST that changed during install was checked or reloaded: $(calls) / $out"
+  # (4f) Fixing the mode never touches another name for the same file (a hard link keeps its mode).
+  fresh; herdr_tui_install >/dev/null 2>&1; chmod 600 "$F"; command ln "$F" "$t/backup.toml"; : >"$HERDR_STUB_LOG"
+  herdr_tui_install >/dev/null 2>&1
+  [ "$(stat -f '%Lp' "$t/backup.toml" 2>/dev/null || stat -c '%a' "$t/backup.toml")" = 600 ] || fail "a hard link to the state file had its mode changed"
+  [ "$(stat -f '%Lp' "$F" 2>/dev/null || stat -c '%a' "$F")" = 644 ] && [ ! -s "$HERDR_STUB_LOG" ] || fail "hard link: state not 0644, or reloaded"
+  rm -f "$t/backup.toml"
+  # (4g) A mode that cannot be fixed warns (macOS: a locked file).
+  if command -v chflags >/dev/null 2>&1; then
+    fresh; herdr_tui_install >/dev/null 2>&1; chmod 666 "$F"; chflags uchg "$F"
+    out="$(herdr_tui_install 2>&1)"; chflags nouchg "$F"
+    [ "$(warnings "$out")" = 1 ] || fail "a locked state file was not reported: $out"
+  fi
+  # (4e) An unchanged state file converges to 0644.
+  fresh; herdr_tui_install >/dev/null 2>&1; chmod 666 "$F"; : >"$HERDR_STUB_LOG"
+  herdr_tui_install >/dev/null 2>&1
+  [ "$(stat -f '%Lp' "$F" 2>/dev/null || stat -c '%a' "$F")" = 644 ] || fail "an unchanged state file kept mode $(stat -f '%Lp' "$F")"
+  [ ! -s "$HERDR_STUB_LOG" ] || fail "a mode-only fix reloaded Herdr"
+
+  # (4b) A symlinked $HOME is the trusted anchor: the TUI installs, and a copy row under a
+  # fresh home is still accepted (copy_dest_ok behavior unchanged).
+  rm -rf "$t/realhome" "$t/home"; mkdir -p "$t/realhome"; ln -s "$t/realhome" "$t/home"; export HOME="$t/home"
+  L="$HOME/.config/herdr"; D="$L/config.toml"; S="$HOME/.local/state/dot-configs/herdr"; F="$S/config.toml"; stub; : >"$HERDR_STUB_LOG"
+  out="$(herdr_tui_install 2>&1)"
+  [ "$(readlink "$D")" = "$F" ] && [ -f "$F" ] || fail "a symlinked HOME was refused: $out"
+  copy_dest_ok "$HOME/.config/herdr-app/mods/apollo-tabs/main.js" || fail "copy_dest_ok refused a copy row under a symlinked HOME"
+  rm -f "$t/home"
+
+  # (5) Missing or broken theme: one warning; an existing state file, link and server stay as they are.
+  fresh; herdr_tui_install >/dev/null 2>&1; cp "$F" "$t/state.before"; : >"$HERDR_STUB_LOG"
+  jq '.colors.hover = "nope"' "$real_repo/config/herdr/themes/apollo.json" >"$theme"
+  out="$(herdr_tui_install 2>&1)" || fail "a broken theme failed the install"
+  [ "$(warnings "$out")" = 1 ] && cmp -s "$F" "$t/state.before" && [ "$(readlink "$D")" = "$F" ] && [ ! -s "$HERDR_STUB_LOG" ] \
+    || fail "a broken theme changed state or called herdr: $out"
+  rm -f "$theme"
+  out="$(herdr_tui_install 2>&1)" || fail "a missing theme failed the install"
+  [ "$(warnings "$out")" = 1 ] && cmp -s "$F" "$t/state.before" || fail "a missing theme changed state: $out"
+  cp "$real_repo/config/herdr/themes/apollo.json" "$theme"
+
+  # (6) Reload rules: failed check skips reload; failed reload warns; another HERDR_CONFIG_PATH is not reloaded;
+  # the same file under another spelling is; no herdr on PATH still links.
+  fresh; stub '[ "$1" = config ] && exit 1; exit 0'
+  out="$(herdr_tui_install 2>&1)" || fail "a failed check failed the install"
+  [ "$(calls)" = "$D|config check" ] && [ "$(warnings "$out")" = 1 ] || fail "failed check: $(calls) / $out"
+  fresh; stub '[ "$1" = server ] && exit 1; exit 0'
+  out="$(herdr_tui_install 2>&1)"; [ "$(warnings "$out")" = 1 ] || fail "a failed reload did not warn once: $out"
+  fresh; HERDR_CONFIG_PATH="$t/other.toml" herdr_tui_install >/dev/null 2>&1
+  [ "$(calls)" = "$D|config check" ] || fail "reloaded a server using another config: $(calls)"
+  fresh; HERDR_CONFIG_PATH="$L/./config.toml" herdr_tui_install >/dev/null 2>&1
+  [ "$(wc -l <"$HERDR_STUB_LOG" | tr -d ' ')" = 2 ] || fail "skipped reload for the same file: $(calls)"
+  fresh; rm -f "$t/bin/herdr"
+  PATH="$t/bin:/usr/bin:/bin" herdr_tui_install >/dev/null 2>&1; [ "$(readlink "$D")" = "$F" ] || fail "no herdr: not linked"
+
+  # (7) A failed ln deletes nothing: a folder that appears with our link inside is reported and kept.
+  fresh; stub
+  ln() { mkdir -p "$D"; command ln -s "$F" "$D/config.toml"; return 1; }
+  out="$(herdr_tui_install 2>&1)"; unset -f ln
+  [ -d "$D" ] && [ "$(readlink "$D/config.toml")" = "$F" ] && [ "$(warnings "$out")" = 1 ] || fail "failed ln: $out"
+  [ ! -s "$HERDR_STUB_LOG" ] || fail "failed ln: called herdr"
+
+  # (9) Both Wiki pages document the TUI: state path, generator, and every token.
+  for w in wiki/Herdr.md wiki/Herdr-zh-CN.md; do
+    for k in '## Herdr TUI' '~/.local/state/dot-configs/herdr/config.toml' herdr_tui_generate HERDR_CONFIG_PATH \
+        accent peach panel_bg sidebar_bg active_row_bg surface_dim selection_bg surface0 surface1 overlay0 overlay1 \
+        subtext0 '`text`' green yellow red blue mauve teal; do
+      grep -Fq -- "$k" "$real_repo/$w" || fail "$w lacks $k"
+    done
+  done
+  # (8) Order and wiring: after the overlay, through herdr_step; no .bak anywhere.
+  [ "$(grep -n -x -e 'link_local_overlay' -e 'herdr_step herdr_tui_install' "$real_repo/install.sh" | cut -d: -f2 | tr '\n' ' ')" \
+    = "link_local_overlay herdr_step herdr_tui_install " ] || fail "herdr_tui_install must run once, after link_local_overlay"
+  [ -z "$(find "$t" -name '*.bak*' -print)" ] || fail "a .bak file was made"
+  echo "herdr tui: ok"
+)
+
 # Write-site guard and owner-home preflight. Every rm/rmdir/mv/cp/ln/install -m/redirect/tee -a in
 # install.sh must be classified in scripts/install-writes.tsv; scripts/herdr-preflight.sh must refuse
 # every unsafe home state and change nothing.
@@ -4028,6 +4243,19 @@ run_herdr_preflight_smoke() (
   [ "$rc" = 1 ] && grep -q "REFUSE linked folder on the way to a copy destination: $m" <<<"$out" || fail "a linked mod folder was allowed"
   fresh; mkdir -p "$m"; pre copy-folder
   [ "$rc" = 1 ] && grep -q "REFUSE folder at a copy destination: $m" <<<"$out" || fail "a folder at a copy destination was allowed"
+  # The Herdr TUI config: live folder, link, state folder and state file are journaled;
+  # missing -> create; ours -> link:; a user file -> keep:; a folder -> refused.
+  fresh; pre herdr-tui-none
+  for p in .config/herdr .config/herdr/config.toml .local/state/dot-configs/herdr .local/state/dot-configs/herdr/config.toml; do
+    grep -qxF "$HOME/$p" "$t/journal" || fail "the journal lacks $p"
+  done
+  grep -qxF "create: $HOME/.config/herdr/config.toml" <<<"$out" || fail "a missing Herdr TUI config was not create: $out"
+  fresh; mkdir -p "$HOME/.config/herdr/config.toml"; pre herdr-tui-folder
+  [ "$rc" = 1 ] && grep -q "REFUSE folder at the Herdr TUI config: $HOME/.config/herdr/config.toml" <<<"$out" || fail "a folder at the Herdr TUI config was allowed"
+  fresh; mkdir -p "$HOME/.config/herdr"; printf 'onboarding = false\n' >"$HOME/.config/herdr/config.toml"; pre herdr-tui-file
+  [ "$rc" = 0 ] && grep -qxF "keep: $HOME/.config/herdr/config.toml (install leaves an existing Herdr config)" <<<"$out" || fail "a user Herdr TUI config was not keep: $out"
+  fresh; mkdir -p "$HOME/.config/herdr"; ln -s "$HOME/.local/state/dot-configs/herdr/config.toml" "$HOME/.config/herdr/config.toml"; pre herdr-tui-ours
+  [ "$rc" = 0 ] && grep -qxF "link: $HOME/.config/herdr/config.toml -> $HOME/.local/state/dot-configs/herdr/config.toml" <<<"$out" || fail "our Herdr TUI link was not link: $out"
   echo "herdr preflight: ok"
 )
 
@@ -4144,6 +4372,7 @@ run_smoke() {
   run_herdr_copy_boundary_smoke
   run_herdr_link_fail_smoke
   run_herdr_app_smoke
+  run_herdr_tui_smoke
   run_herdr_preflight_smoke
   run_local_checks
 }
@@ -4162,7 +4391,7 @@ case "${1:-all}" in
   local) run_local_checks ;;
   firefox) run_firefox_smoke ;;
   editors) run_editors_smoke; run_zed_defaults_smoke ;;
-  herdr) run_herdr_smoke; run_herdr_copy_smoke; run_herdr_install_smoke; run_herdr_seed_smoke; run_herdr_adopt_smoke; run_herdr_copy_boundary_smoke; run_herdr_link_fail_smoke; run_herdr_app_smoke; run_herdr_preflight_smoke ;;
+  herdr) run_herdr_smoke; run_herdr_copy_smoke; run_herdr_install_smoke; run_herdr_seed_smoke; run_herdr_adopt_smoke; run_herdr_copy_boundary_smoke; run_herdr_link_fail_smoke; run_herdr_app_smoke; run_herdr_tui_smoke; run_herdr_preflight_smoke ;;
   backups) run_install_backup_smoke ;;
   shellcheck) run_shellcheck ;;
   all) run_smoke; run_shellcheck ;;
