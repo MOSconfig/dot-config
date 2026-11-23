@@ -17,12 +17,22 @@ Firefox 每次启动都会读取 `user.js`，并覆盖 `about:config` 中的值�
 | 设置 | 值 |
 |---|---|
 | `toolkit.legacyUserProfileCustomizations.stylesheets` | `true`；主题需要 |
-| `font.*` | 正文使用 Rec Sans Mt.Baker，衬线使用 Rec Serif Mt.Adams，等宽使用 Rec Mono St.Helens，以及对应字号 |
-| `privacy.fingerprintingProtection.overrides` | `-FontVisibilityLangPack`；否则指纹保护会让网页看不到 `~/Library/Fonts` 中的字体。其他保护仍然开启。Mozilla 针对个别网站的覆盖规则仍可能在这些网站上隐藏它们 |
 | `browser.search.suggest.enabled`、`browser.urlbar.suggest.*` | `false`；不显示搜索、热门、赞助或常用网站建议 |
 | `browser.newtabpage.*` | `false`；不显示新标签页、推荐内容或常用网站 |
 
 要修改这些设置，请编辑 `config/firefox/user.js`；在 `about:config` 中的修改会在下次启动时被重置。其他设置（例如固定网站）仍由你在 `about:config` 中管理，永远不会存入这个公开仓库。
+
+## 默认字体
+
+`user.js` 不设置任何字体，所以网页使用 Firefox 自己的默认字体。oh-my-firefox 主题仍然负责 Firefox 自身界面、查看源代码和开发者工具的样式。
+
+旧版 `user.js` 设置过 Rec 字体及其字号。这些行从 `user.js` 移除后，Firefox 仍会把这些值保留在配置文件中，而安装程序从不修改配置文件的 `prefs.js`。每个配置文件只需重置一次：
+
+1. 打开 `about:config`，搜索 `font.`。
+2. 对每个已修改（粗体）的条目点击重置箭头，例如 `font.name.sans-serif.x-western` 或 `font.size.variable.x-western`。
+3. 搜索 `privacy.fingerprintingProtection.overrides`，同样重置。
+
+之后网页会回到 Firefox 的默认字体。你之后自己设置的字体会保留。
 
 ## oh-my-firefox 主题
 

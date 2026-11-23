@@ -3003,7 +3003,7 @@ SH
 # Each profile below needs exactly one guard to be left alone.
 run_firefox_smoke() {
   (
-    local test_root base ok_origin seed head p
+    local test_root base ok_origin seed head p h
     test_root="$(mktemp -d)"
     trap 'rm -rf "$test_root"' EXIT
     export HOME="$test_root/home"
@@ -3014,32 +3014,21 @@ run_firefox_smoke() {
 
     # The managed prefs keep the theme switch on and carry no personal data.
     grep -Fq 'user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);' config/firefox/user.js
-    # Pages may use user-installed fonts under fingerprinting protection, and
-    # Rec Sans Mt.Baker is the page font, Rec Serif Mt.Adams the serif font;
-    # monospace and sizes stay as they were.
-    for p in \
-      'user_pref("privacy.fingerprintingProtection.overrides", "-FontVisibilityLangPack");' \
-      'user_pref("font.name.serif.x-western", "Rec Serif Mt.Adams");' \
-      'user_pref("font.name.serif.zh-CN", "Rec Serif Mt.Adams");' \
-      'user_pref("font.name.sans-serif.x-western", "Rec Sans Mt.Baker");' \
-      'user_pref("font.name.sans-serif.zh-CN", "Rec Sans Mt.Baker");' \
-      'user_pref("font.name.sans-serif.ar", "Rec Sans Mt.Baker");' \
-      'user_pref("font.name.monospace.x-western", "Rec Mono St.Helens");' \
-      'user_pref("font.name.monospace.zh-CN", "Rec Mono St.Helens");' \
-      'user_pref("font.size.variable.x-western", 15);' \
-      'user_pref("font.size.variable.zh-CN", 14);' \
-      'user_pref("font.size.variable.ar", 14);' \
-      'user_pref("font.size.monospace.zh-CN", 14);'; do
-      grep -Fqx "$p" config/firefox/user.js || { echo "config/firefox/user.js is missing: $p" >&2; return 1; }
-    done
-    if grep -Fq 'Resource Han' config/firefox/user.js; then
-      echo "config/firefox/user.js still names Resource Han Rounded CN" >&2
+    # Pages use Firefox's own default fonts: user.js sets no font pref and no
+    # font-visibility override, and install never edits a profile's prefs.js.
+    if grep -Eq "[\"']font\.|fingerprintingProtection" config/firefox/user.js; then
+      echo "config/firefox/user.js must not set fonts or the font-visibility override" >&2
       return 1
     fi
-    for p in wiki/Firefox.md wiki/Firefox-zh-CN.md; do
-      grep -Fq 'privacy.fingerprintingProtection.overrides' "$p" && grep -Fq 'Rec Sans Mt.Baker' "$p" \
-        && grep -Fq 'Rec Serif Mt.Adams' "$p" \
-        || { echo "$p must document the font override, Rec Sans Mt.Baker, and Rec Serif Mt.Adams" >&2; return 1; }
+    if grep -n 'prefs\.js' install.sh; then
+      echo "install.sh must not edit a Firefox profile's prefs.js" >&2
+      return 1
+    fi
+    for p in 'wiki/Firefox.md:## Default fonts' 'wiki/Firefox-zh-CN.md:## 默认字体'; do
+      h="${p#*:}"; p="${p%%:*}"
+      ! grep -Fq 'Rec Sans Mt.Baker' "$p" && grep -Fqx "$h" "$p" && grep -Fq 'about:config' "$p" \
+        && grep -Fq 'font.' "$p" && grep -Fq 'privacy.fingerprintingProtection.overrides' "$p" \
+        || { echo "$p must drop the managed fonts and say how to reset saved font prefs" >&2; return 1; }
     done
     if grep -Eiq 'newtabpage\.pinned|identity|sync|token|password|@' config/firefox/user.js; then
       echo "config/firefox/user.js must not carry personal data" >&2
