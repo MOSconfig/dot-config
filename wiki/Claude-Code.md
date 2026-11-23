@@ -29,8 +29,8 @@ The tracked default is:
 ```text
 Claude-facing name: claude-opus-5-5[1m]
 Picker alias:       opus[1m]
-Saved Opus effort:  high
-Launcher effort:    high
+Saved Opus effort:  xhigh
+Launcher effort:    xhigh
 Relay route:        opusModel
 Upstream model:     claude-opus-5.5
 ```
@@ -45,7 +45,7 @@ Other routes:
 
 Opus keeps its native Anthropic id. Every other slot calls `gpt-6.2-astra[1m]` directly, so the client name already matches the upstream model and nothing needs remapping. The `/model` picker shows readable labels. The relay still sends any non-Opus name to `gptModel`.
 
-The `[1m]` suffix keeps Claude Code's one-million-token context accounting; the relay sends canonical `claude-opus-5.5` upstream without that suffix. Haiku and small-fast use `gpt-6.2-astra[1m]` too. Context accounting does not guarantee a full 1M-token conversation history; automatic compaction also depends on model and output budgets. Claude's saved Opus preference uses `xhigh`; the saved Sonnet preference, launchers, and status-line effort fallback use `high`. The relay's fallback in `config/copilot-relay/config.yaml` is `xhigh`.
+The `[1m]` suffix keeps Claude Code's one-million-token context accounting; the relay sends canonical `claude-opus-5.5` upstream without that suffix. Haiku and small-fast use `gpt-6.2-astra[1m]` too. Context accounting does not guarantee a full 1M-token conversation history; automatic compaction also depends on model and output budgets. Claude's saved Opus preference, launchers, and status-line effort fallback use `xhigh`; the saved Sonnet preference uses `high`. The relay's fallback in `config/copilot-relay/config.yaml` is `xhigh`.
 
 The native Opus 5.5 identity is recognized by Claude Code 2.1.281. Update model and effort defaults in `config/claude/settings.json`, `config/zsh/claude.zsh`, and `config/zsh/cc.zsh` together; the wrappers' `--model` and `--effort` flags override saved settings. Relay `thinkEffort` (`xhigh`) is the separate fallback for requests without effort. The separate `gptModel` stays `gpt-6.2-astra`, and the blank `webSearchBackend` still uses Astra.
 
@@ -70,9 +70,9 @@ Changing only `opusModel` does not select Opus at startup. `ANTHROPIC_MODEL`, th
 | `ANTHROPIC_SMALL_FAST_MODEL` | `gpt-6.2-astra[1m]` |
 | `model` | `opus[1m]`; the picker's native alias |
 | `modelPicker` | only `Opus 5.5 (1M context)` and `GPT-6.2 Astra (1M context)`; replaces the built-in list |
-| `modelSettings.claude-opus-5-5.effortLevel` | `high`; Opus 5.5's saved effort preference |
+| `modelSettings.claude-opus-5-5.effortLevel` | `xhigh`; Opus 5.5's saved effort preference |
 | `modelSettings.claude-sonnet-5.effortLevel` | `high`; Sonnet 5's saved effort preference |
-| `MODEL_REASONING_EFFORT` | `high`; status-line fallback aligned with the launchers' `--effort high` |
+| `MODEL_REASONING_EFFORT` | `xhigh`; status-line fallback aligned with the launchers' `--effort xhigh` |
 | `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` | `16` |
 | `statusLine.refreshInterval` | `100` |
 | `theme` | `custom:apollo`; generated theme assets stay local |
@@ -88,7 +88,7 @@ Changing only `opusModel` does not select Opus at startup. `ANTHROPIC_MODEL`, th
 | `cleanupPeriodDays` | `7`; delete session transcripts after 7 days of inactivity to save disk space (default 30) |
 | `CLAUDE_CODE_AUTO_MODE_SERVER` | `"0"`; auto mode uses classifier requests from Claude Code itself instead of server-side review. Permission checks stay on |
 
-`refreshInterval` belongs inside `statusLine`. The saved Opus preference uses `xhigh`; the saved Sonnet preference uses `high`. `MODEL_REASONING_EFFORT` is a status-line fallback, not an API effort control. The launchers pass `--effort high`; an explicit effort on the `claude` command overrides it. No top-level `effortLevel` is managed. [Copilot CLI](Copilot-CLI.md) keeps its separate Astra/`high` defaults.
+`refreshInterval` belongs inside `statusLine`. The saved Opus preference uses `xhigh`; the saved Sonnet preference uses `high`. `MODEL_REASONING_EFFORT` is a status-line fallback, not an API effort control. The launchers pass `--effort xhigh`; an explicit effort on the `claude` command overrides it. No top-level `effortLevel` is managed. [Copilot CLI](Copilot-CLI.md) keeps its separate Astra/`xhigh` defaults.
 
 ### Model picker
 
@@ -105,7 +105,7 @@ This is a picker change, not a hard block. No `availableModels` list is set. `mo
 
 A sandboxed Claude Code 2.1.286 check showed exactly three rows. Against a local mock, the default sent `claude-opus-5-5`. `--model sonnet`, `--model haiku`, and the GPT row each sent `gpt-6-astra` with `high` effort, adaptive thinking, and the 1M context beta. Small real requests through the relay returned `ok` on each path.
 
-An isolated Claude Code 2.1.281 check, run when the default was `xhigh`, verified settings-only, picker-alias, and wrapper launches send `model: claude-opus-5-5` with the configured `output_config.effort` and the 1M context beta. The default is now `high`; that check was not rerun. An explicit Sonnet/`low` override still wins. The check used a loopback mock, a temporary home, and a macOS sandbox blocking external networking and real-home/keychain access; it was not a paid model call or an upstream capacity test.
+An isolated Claude Code 2.1.281 check, run when the default was `xhigh`, verified settings-only, picker-alias, and wrapper launches send `model: claude-opus-5-5` with the configured `output_config.effort` and the 1M context beta. The default was later `high` and is `xhigh` again. An explicit Sonnet/`low` override still wins. The check used a loopback mock, a temporary home, and a macOS sandbox blocking external networking and real-home/keychain access; it was not a paid model call or an upstream capacity test.
 
 ### Automatic compaction
 
@@ -139,7 +139,7 @@ After a PR merges, the global rules require local cleanup before the task is cal
 ```text
 --permission-mode bypassPermissions
 --model claude-opus-5-5[1m]
---effort high
+--effort xhigh
 ```
 
 An explicit `--model`, `--model=`, `--effort`, or `--effort=` on the command line suppresses the matching default; the other default still applies.

@@ -79,7 +79,7 @@ codexSetup: false
 
 Tab completes copilot-relay commands, flags, and configured models in zsh; see [SonicTerm and shell](SonicTerm-and-Shell.md). `install.sh`, and so `uu`, keeps the relay at the latest npm version.
 
-Codex is not used. `codexSetup: false` stops the relay from editing `~/.codex`. Keep the key: the relay writes a missing key back with its default, `true`. `claudeSetup: false` stops the relay from rewriting the linked Claude settings. The relay's `thinkEffort` fallback is `xhigh`; Claude's saved Opus preference also uses `xhigh`; launchers and the status-line fallback use `high`. Explicit client effort still takes precedence. Copilot CLI and `gg` retain their separate Astra/`high` defaults. Model routes and relay effort hot-reload without a restart; existing shells need their Claude launchers reloaded or a new shell. `upstreamTimeoutSeconds: 900` allows up to fifteen minutes for a single Claude request's upstream Copilot calls.
+Codex is not used. `codexSetup: false` stops the relay from editing `~/.codex`. Keep the key: the relay writes a missing key back with its default, `true`. `claudeSetup: false` stops the relay from rewriting the linked Claude settings. The relay's `thinkEffort` fallback is `xhigh`; Claude's saved Opus preference, launchers, and status-line fallback also use `xhigh`. Explicit client effort still takes precedence. Copilot CLI and `gg` keep their separate Astra/`xhigh` defaults. Model routes and relay effort hot-reload without a restart; existing shells need their Claude launchers reloaded or a new shell. `upstreamTimeoutSeconds: 900` allows up to fifteen minutes for a single Claude request's upstream Copilot calls.
 
 Login once:
 
