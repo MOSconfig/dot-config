@@ -63,3 +63,9 @@ remove_legacy_claude_subagent_hook	journaled	rmdir "$hooks_dir" 2>/dev/null || t
 remove_repo_symlink	journaled	rm -f "$path"
 render_launchd_template	journaled	"$template" >"$dest"
 setup_logging	package	done | tee -a "$install_log") 2>&1
+herdr_tui_generate	temp-only	cat >"$out" <<EOF || return 1
+herdr_tui_install	temp-only	rm -f "$tmp"
+herdr_tui_install	temp-only	rm -f "$tmp"
+herdr_tui_install	journaled	elif mv -f "$tmp" "$file"; then
+herdr_tui_install	temp-only	rm -f "$tmp"; echo "Warning: Herdr TUI: could not update $file." >&2; return 0
+herdr_tui_install	journaled	if ! ln -sn "$file" "$dest" 2>/dev/null || [ ! -L "$dest" ] || [ "$(readlink -n "$dest"; echo x)" != "$file"x ]; then

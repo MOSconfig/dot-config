@@ -4,6 +4,8 @@ English | [简体中文](Herdr-zh-CN.md)
 
 This page covers the Apollo layout for the terminal workspace app. The app is **Apollo.app**, a renamed copy of [Herdr](https://herdr.dev) that replaced Herdr.app. It loads Herdr's settings home, `~/.config/herdr-app`, so everything below still installs there. The layout lives in its own public repo, [herdr-config](https://github.com/MOSconfig/herdr-config). This repo includes it as a Git submodule at `config/herdr`. The submodule follows herdr-config's `main`: every install moves it to the latest commit.
 
+The separate `herdr` terminal app (the TUI) gets the same theme; see [Herdr TUI](#herdr-tui).
+
 ## What install does
 
 `./install.sh` (and `uu`, which runs it) does these steps on macOS. It never installs Herdr or Apollo.app; install Apollo.app by hand.
@@ -29,6 +31,37 @@ No backup of any kind is kept: no seed folder, no archive, no `.bak` file.
 ## Why mods are copies
 
 Herdr does not load a mod's `svg()` and `image()` files through a link, so its icons would be blank. Each mod file is a `copy` row instead. See [Repository operations](Repository-Operations.md) for how copies are kept in step and removed.
+
+## Herdr TUI
+
+The `herdr` terminal app (installed by hand, for example `brew install herdr`) reads one file, `~/.config/herdr/config.toml`. It has no include, so `./install.sh` generates the whole file from `config/herdr/themes/apollo.json`, the theme the Herdr app loads. Both apps then show the same colors, and a herdr-config theme change reaches both on the next `uu`.
+
+The generated file lives at `~/.local/state/dot-configs/herdr/config.toml`. `~/.config/herdr/config.toml` is a link to it. The installer function is `herdr_tui_generate` in `install.sh`.
+
+| Herdr TUI token | App theme key |
+|---|---|
+| `accent`, `peach` | `colors.accent` |
+| `panel_bg`, `sidebar_bg` | `colors.chrome` |
+| `active_row_bg`, `surface_dim` | `colors.surface` |
+| `selection_bg`, `surface0` | `colors.selected` |
+| `surface1` | `colors.hover` |
+| `overlay0` | `colors.dim` |
+| `overlay1`, `subtext0` | `colors.muted` |
+| `text` | `colors.foreground` |
+| `green`, `yellow`, `red` | `colors.done`, `colors.working`, `colors.blocked` |
+| `blue`, `mauve`, `teal` | `ansi[4]`, `ansi[5]`, `ansi[6]` |
+
+The layout follows Apollo tmux: tab bar at the bottom, a zoom mark and an `HH:MM` clock on the right, no outer frame or gaps between panes, and symbol status marks.
+
+Install never replaces your own Herdr TUI config:
+
+- It links `~/.config/herdr/config.toml` only when nothing is there. Any other file, link, or folder there is kept, with one warning. To switch, move it aside and rerun `./install.sh`.
+- It never writes through a link. If a link sits below your home folder on the way to `~/.config/herdr` or `~/.local/state/dot-configs/herdr`, it warns and changes nothing.
+- A missing or bad color in the theme warns and keeps the current file.
+
+When it makes the link or the generated file changes, install runs `herdr config check` on that file, then `herdr server reload-config`. A failure only warns. If `HERDR_CONFIG_PATH` points to another file, it does not reload. An unchanged rerun does not call `herdr`.
+
+To change the look, edit `themes/apollo.json` in herdr-config, or the token map in `herdr_tui_generate`. Edits to the generated file are lost on the next change.
 
 ## Agent hooks
 

@@ -4,6 +4,8 @@
 
 本页介绍终端工作区应用的 Apollo 布局。应用是 **Apollo.app**：它是 [Herdr](https://herdr.dev) 的改名副本，已取代 Herdr.app。它读取 Herdr 的设置目录 `~/.config/herdr-app`，所以下面的内容仍然安装到那里。布局放在独立的公开仓库 [herdr-config](https://github.com/MOSconfig/herdr-config) 中。本仓库把它作为 Git 子模块放在 `config/herdr`。子模块跟随 herdr-config 的 `main`：每次安装都会更新到最新提交。
 
+独立的 `herdr` 终端应用（TUI）使用同一个主题；见 [Herdr TUI](#herdr-tui)。
+
 ## 安装做什么
 
 `./install.sh`（以及运行它的 `uu`）在 macOS 上执行这些步骤。它从不安装 Herdr 或 Apollo.app；请手动安装 Apollo.app。
@@ -29,6 +31,37 @@
 ## 为什么 mod 是副本
 
 Herdr 不会通过链接加载 mod 的 `svg()` 和 `image()` 文件，这样图标会是空白的。所以每个 mod 文件都是 `copy` 行。副本如何保持同步和被删除，请看 [仓库操作](Repository-Operations-zh-CN.md)。
+
+## Herdr TUI
+
+`herdr` 终端应用（手动安装，例如 `brew install herdr`）只读取一个文件：`~/.config/herdr/config.toml`。它不支持 include，所以 `./install.sh` 用 `config/herdr/themes/apollo.json` 生成整个文件；这正是 Herdr 应用加载的主题。两个应用因此显示相同的颜色，herdr-config 的主题修改会在下次 `uu` 时同时到达两者。
+
+生成的文件位于 `~/.local/state/dot-configs/herdr/config.toml`，`~/.config/herdr/config.toml` 是指向它的链接。生成函数是 `install.sh` 中的 `herdr_tui_generate`。
+
+| Herdr TUI token | 应用主题键 |
+|---|---|
+| `accent`、`peach` | `colors.accent` |
+| `panel_bg`、`sidebar_bg` | `colors.chrome` |
+| `active_row_bg`、`surface_dim` | `colors.surface` |
+| `selection_bg`、`surface0` | `colors.selected` |
+| `surface1` | `colors.hover` |
+| `overlay0` | `colors.dim` |
+| `overlay1`、`subtext0` | `colors.muted` |
+| `text` | `colors.foreground` |
+| `green`、`yellow`、`red` | `colors.done`、`colors.working`、`colors.blocked` |
+| `blue`、`mauve`、`teal` | `ansi[4]`、`ansi[5]`、`ansi[6]` |
+
+布局跟随 Apollo tmux：标签栏在底部，右侧有缩放标记和 `HH:MM` 时钟，没有外框和窗格间隙，状态用符号标记。
+
+安装从不替换你自己的 Herdr TUI 配置：
+
+- 只有 `~/.config/herdr/config.toml` 不存在时才创建链接。那里已有的文件、链接或文件夹都会保留，并输出一条警告。要切换，请先把它移走，再重新运行 `./install.sh`。
+- 从不通过链接写入。如果在家目录下通往 `~/.config/herdr` 或 `~/.local/state/dot-configs/herdr` 的路径上有链接，它会警告且不做任何修改。
+- 主题中缺少颜色或颜色无效时，会警告并保留当前文件。
+
+创建链接或生成的文件有变化时，安装会对该文件运行 `herdr config check`，然后运行 `herdr server reload-config`。失败只会警告。如果 `HERDR_CONFIG_PATH` 指向其他文件，则不重新加载。没有变化的重新运行不会调用 `herdr`。
+
+要修改外观，请编辑 herdr-config 中的 `themes/apollo.json`，或 `herdr_tui_generate` 中的 token 映射。对生成文件的修改会在下次变化时丢失。
 
 ## Agent hook
 
