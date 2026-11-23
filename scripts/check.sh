@@ -4086,6 +4086,18 @@ PYT
   out="$(herdr_tui_install 2>&1)"; unset -f mv
   [ "$(readlink "$D")" = "$t/foreign.toml" ] && [ ! -s "$HERDR_STUB_LOG" ] && [ "$(warnings "$out")" = 1 ] \
     || fail "a DEST that changed during install was checked or reloaded: $(calls) / $out"
+  # (4f) Fixing the mode never touches another name for the same file (a hard link keeps its mode).
+  fresh; herdr_tui_install >/dev/null 2>&1; chmod 600 "$F"; command ln "$F" "$t/backup.toml"; : >"$HERDR_STUB_LOG"
+  herdr_tui_install >/dev/null 2>&1
+  [ "$(stat -f '%Lp' "$t/backup.toml" 2>/dev/null || stat -c '%a' "$t/backup.toml")" = 600 ] || fail "a hard link to the state file had its mode changed"
+  [ "$(stat -f '%Lp' "$F" 2>/dev/null || stat -c '%a' "$F")" = 644 ] && [ ! -s "$HERDR_STUB_LOG" ] || fail "hard link: state not 0644, or reloaded"
+  rm -f "$t/backup.toml"
+  # (4g) A mode that cannot be fixed warns (macOS: a locked file).
+  if command -v chflags >/dev/null 2>&1; then
+    fresh; herdr_tui_install >/dev/null 2>&1; chmod 666 "$F"; chflags uchg "$F"
+    out="$(herdr_tui_install 2>&1)"; chflags nouchg "$F"
+    [ "$(warnings "$out")" = 1 ] || fail "a locked state file was not reported: $out"
+  fi
   # (4e) An unchanged state file converges to 0644.
   fresh; herdr_tui_install >/dev/null 2>&1; chmod 666 "$F"; : >"$HERDR_STUB_LOG"
   herdr_tui_install >/dev/null 2>&1

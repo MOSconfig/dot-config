@@ -1148,7 +1148,7 @@ EOF
 }
 
 herdr_tui_install() {
-  local live="${HOME}/.config/herdr" state dest file theme="${repo_root}/config/herdr/themes/apollo.json" tmp made=0 changed=0
+  local live="${HOME}/.config/herdr" state dest file theme="${repo_root}/config/herdr/themes/apollo.json" tmp made=0 changed=0 same
   state="$(herdr_tui_state)"; dest="${live}/config.toml"; file="${state}/config.toml"
   # Ownership first: only a missing DEST or our exact link (byte for byte) is ours.
   if [ -L "$dest" ]; then
@@ -1159,7 +1159,8 @@ herdr_tui_install() {
     echo "Warning: kept $dest; to use the Apollo Herdr TUI config, move it aside and rerun install.sh." >&2; return 0
   fi
   # Both folders must be where they say (no link below $HOME), so neither can alias the other.
-  # shortcut: a process changing these folders between this check and the mv is not guarded; that needs an exact-path syscall.
+  # shortcut: a process that changes these folders or DEST while install runs (between a check and the
+  # mv, or between `herdr config check` and the reload) is not guarded; that needs exact-path syscalls.
   if ! home_path_physical "$live" || ! home_path_physical "$state"; then
     echo "Warning: Herdr TUI: a linked folder is on the way to $dest or $state; left it alone." >&2; return 0
   fi
@@ -1175,11 +1176,13 @@ herdr_tui_install() {
     rm -f "$tmp"
     echo "Warning: Herdr TUI: $theme has a missing or bad color; kept the current Herdr TUI config." >&2; return 0
   fi
-  if cmp -s "$tmp" "$file"; then
+  # Same bytes and mode: nothing to do. Otherwise replace the file (never chmod in place, which would
+  # also change a hard link elsewhere); only new bytes count as a change that needs a reload.
+  same=0; cmp -s "$tmp" "$file" && same=1
+  if [ "$same" = 1 ] && [ "$(stat -f '%Lp' "$file" 2>/dev/null || stat -c '%a' "$file")" = 644 ]; then
     rm -f "$tmp"
-    chmod 644 "$file" 2>/dev/null
   elif mv -f "$tmp" "$file"; then
-    changed=1
+    [ "$same" = 1 ] || changed=1
   else
     rm -f "$tmp"; echo "Warning: Herdr TUI: could not update $file." >&2; return 0
   fi
