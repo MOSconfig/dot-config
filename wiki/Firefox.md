@@ -17,12 +17,22 @@ Firefox reads `user.js` at every start and applies it over `about:config`. The m
 | Prefs | Value |
 |---|---|
 | `toolkit.legacyUserProfileCustomizations.stylesheets` | `true`; required by the theme |
-| `font.*` | Rec Sans Mt.Baker for page text, Rec Serif Mt.Adams for serif, Rec Mono St.Helens for monospace, and their sizes |
-| `privacy.fingerprintingProtection.overrides` | `-FontVisibilityLangPack`; fingerprinting protection otherwise hides fonts in `~/Library/Fonts` from pages. Its other protections stay on. Mozilla's per-site overrides can still hide them on some sites |
 | `browser.search.suggest.enabled`, `browser.urlbar.suggest.*` | `false`; no search, trending, sponsored, or top-site suggestions |
 | `browser.newtabpage.*` | `false`; no new-tab page, stories, or top sites |
 
 To change one of these, edit `config/firefox/user.js`; a change in `about:config` is reset at the next start. Other prefs, such as pinned sites, stay yours in `about:config` and are never stored in this public repo.
+
+## Default fonts
+
+`user.js` sets no font, so pages use Firefox's own default fonts. The oh-my-firefox theme still styles Firefox's own UI, view-source, and DevTools.
+
+Older versions of `user.js` set Rec fonts and their sizes. Firefox keeps those values in the profile after the lines leave `user.js`, and install never edits a profile's `prefs.js`. To reset them once per profile:
+
+1. Open `about:config` and search for `font.`.
+2. Click the reset arrow on each changed (bold) entry, such as `font.name.sans-serif.x-western` or `font.size.variable.x-western`.
+3. Search for `privacy.fingerprintingProtection.overrides` and reset it too.
+
+Pages then fall back to Firefox's defaults. A font you set later stays yours.
 
 ## oh-my-firefox theme
 
