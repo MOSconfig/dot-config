@@ -3016,7 +3016,7 @@ run_firefox_smoke() {
     grep -Fq 'user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);' config/firefox/user.js
     # Pages use Firefox's own default fonts: user.js sets no font pref and no
     # font-visibility override, and install never edits a profile's prefs.js.
-    if grep -Eq '"font\.|fingerprintingProtection' config/firefox/user.js; then
+    if grep -Eq "[\"']font\.|fingerprintingProtection" config/firefox/user.js; then
       echo "config/firefox/user.js must not set fonts or the font-visibility override" >&2
       return 1
     fi
