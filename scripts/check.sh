@@ -46,6 +46,126 @@ run_statusline_smoke() {
   echo "statusline diff ok"
 }
 
+# The btw item reads mermaid-tty's per-session marker. Each status line runs
+# in a fixture repo on a neutral branch, with its caches in the fixture and a
+# fixed clock, so neither the branch nor the path can hold the words checked
+# and ages are exact; line 2 must read branch, btw with its age, then Diff,
+# in that order. A 299 s marker shows; the item hides for one 300 s old, empty,
+# padded, two-line or holding a NUL; for another session's; for a nested
+# session_id or one a brace inside a string or a newline in another field
+# could fake; an escaped key, an invalid id beside an alias, and an id that
+# is not a plain lowercase ASCII name, case included. It shows for the
+# right id whatever the key order or escaping. Then the Claude
+# settings it relies on. A subshell, so its fixture root, one quoted path,
+# is removed on any exit.
+run_statusline_btw_smoke() (
+  set -euo pipefail
+  root="$(mktemp -d)"
+  trap 'rm -rf "$root"' EXIT
+  home="$root/home"
+  repo="$root/repo"
+  bin="$root/bin"
+  mkdir -p "$home/.cache/mermaid-tty" "$repo" "$bin" "$root/tmp"
+  # A fixed clock: date +%s answers $BTW_NOW, so a marker's age is exact and the
+  # 299/300 s cutoff is checked without racing the real clock.
+  real_date="$(command -v date)"
+  printf '#!/bin/sh\nif [ "$1" = "+%%s" ] && [ -n "${BTW_NOW:-}" ]; then echo "$BTW_NOW"; else exec %s "$@"; fi\n' \
+    "$real_date" >"$bin/date"
+  chmod +x "$bin/date"
+  git -C "$repo" init -q -b plain
+  id="qa-session_1"
+  marker="$home/.cache/mermaid-tty/btw-$id"
+  here="$PWD"
+
+  btw_render() {
+    printf '%s' "$2" | (cd "$repo" && HOME="$home" TMPDIR="$root/tmp/" PATH="$bin:$PATH" BTW_NOW="$now" \
+      LC_ALL=en_US.UTF-8 CLAUDE_STATUSLINE_NO_COLOR=1 \
+      COPILOT_STATUSLINE_NO_COLOR=1 CLAUDE_STATUSLINE_NO_ICONS=1 COPILOT_STATUSLINE_NO_ICONS=1 \
+      CLAUDE_STATUSLINE_PAD_TOP=0 COPILOT_STATUSLINE_PAD_TOP=0 bash "$here/$1")
+  }
+  btw_hidden() {
+    local out
+    out="$(btw_render "$1" "$2")"
+    case "$out" in *"btw answering"*) echo "$1: $3 should hide btw: $out" >&2; return 1 ;; esac
+  }
+  # Sets the marker's change time to $1 seconds before the fixed clock.
+  now="$(date +%s)"
+  btw_aged() {
+    local stamp then
+    then=$((now - $1))
+    stamp="$(date -r "$then" +%Y%m%d%H%M.%S 2>/dev/null || date -d "@$then" +%Y%m%d%H%M.%S)"
+    touch -t "$stamp" "$marker"
+  }
+
+  # A model fills line 1 and a diff follows btw, so line 2's order is checked.
+  full="{\"session_id\":\"$id\",\"model\":{\"display_name\":\"Opus\"},\"cost\":{\"total_lines_added\":3}}"
+  for script in config/claude/statusline.sh config/copilot/statusline.sh; do
+    printf '1' >"$marker"
+    btw_aged 42
+    line2="$(btw_render "$script" "$full" | sed -n 2p)"
+    case "$line2" in
+      "Branch plain clean │ btw answering 42s │ Diff +3"*) ;;
+      *) echo "$script: line 2 should be branch, btw answering ~42s, then Diff: $line2" >&2; exit 1 ;;
+    esac
+
+    printf '1\n' >"$marker"
+    btw_aged 299
+    out="$(btw_render "$script" "{\"session_id\":\"$id\"}")"
+    case "$out" in *"btw answering 299s"*) ;; *) echo "$script: a 299 s marker should show: $out" >&2; exit 1 ;; esac
+    btw_aged 300
+    btw_hidden "$script" "{\"session_id\":\"$id\"}" "a 300 s marker"
+
+    : >"$marker"
+    btw_aged 42
+    btw_hidden "$script" "{\"session_id\":\"$id\"}" "an empty marker"
+    printf ' 1 ' >"$marker"
+    btw_aged 42
+    btw_hidden "$script" "{\"session_id\":\"$id\"}" "a padded marker"
+    printf '1\n0' >"$marker"
+    btw_aged 42
+    btw_hidden "$script" "{\"session_id\":\"$id\"}" "a two-line marker"
+    printf '1\0000' >"$marker"
+    btw_aged 42
+    btw_hidden "$script" "{\"session_id\":\"$id\"}" "a marker holding a NUL"
+
+    printf '1' >"$marker"
+    btw_aged 42
+    # The marker shows for its own id here, so each case below is hidden by its id alone.
+    out="$(btw_render "$script" "{\"session_id\":\"$id\"}")"
+    case "$out" in *"btw answering 42s"*) ;; *) echo "$script: a fresh marker should show: $out" >&2; exit 1 ;; esac
+    btw_hidden "$script" '{"session_id":"another"}' "another session's marker"
+    btw_hidden "$script" "{\"workspace\":{\"session_id\":\"$id\"},\"session_id\":\"another\"}" "a nested session_id"
+    btw_hidden "$script" "{\"workspace\":{\"current_dir\":\"/tmp/}\",\"session_id\":\"$id\"},\"session_id\":\"another\"}" \
+      "a brace inside a string"
+    btw_hidden "$script" "{\"session_id\":\"another\",\"session_name\":\"two\\nlines\",\"mode\":\"$id\"}" \
+      "a newline in another field"
+    btw_hidden "$script" "{\"session_id\":\"$id\\nmore\"}" "an id with a newline"
+    btw_hidden "$script" "{\"session_id\":\"$id\\n\"}" "an id with a trailing newline"
+    btw_hidden "$script" "{\"session_id\":\"qa-ses\\u0000sion_1\"}" "an id with a NUL"
+    btw_hidden "$script" "{\"workspace\":{\"session_id\":\"$id\"}}" "a nested id with no top-level one"
+    btw_hidden "$script" "{\"session\\u005fid\":\"another\",\"workspace\":{\"session_id\":\"$id\"}}" \
+      "an escaped top-level key before a nested id"
+    btw_hidden "$script" "{\"session_id\":false,\"sessionId\":\"$id\"}" "an invalid session_id beside an alias"
+    btw_hidden "$script" "{\"session_id\":null,\"sessionId\":\"$id\"}" "a null session_id beside an alias"
+    btw_hidden "$script" '{"session_id":"QA-SESSION_1"}' "an id that differs only in case"
+    # And the other way round: the right marker shows whatever the key order or escaping.
+    for shown in "{\"workspace\":{\"session_id\":\"another\"},\"session_id\":\"$id\"}" \
+      "{\"session\\u005fid\":\"$id\"}"; do
+      out="$(btw_render "$script" "$shown")"
+      case "$out" in *"btw answering 42s"*) ;; *) echo "$script: should show btw for $shown: $out" >&2; exit 1 ;; esac
+    done
+    printf '1' >"$home/.cache/mermaid-tty/btw-café"
+    touch -r "$marker" "$home/.cache/mermaid-tty/btw-café"
+    btw_hidden "$script" '{"session_id":"café"}' "a non-ASCII id"
+    btw_hidden "$script" '{"session_id":"../x"}' "an id with a slash"
+  done
+
+  jq -e '.env.MERMAID_TTY_BTW_STATUS == "file" and .statusLine.refreshInterval == 2' \
+    config/claude/settings.json >/dev/null ||
+    { echo "claude settings: MERMAID_TTY_BTW_STATUS=file and refreshInterval 2 are required" >&2; exit 1; }
+  echo "statusline btw ok"
+)
+
 run_statusline_plugin_smoke() {
   local test_root home proj plugin out
   test_root="$(mktemp -d)"
@@ -4321,6 +4441,7 @@ run_smoke() {
   run_bash_syntax
   run_apollo_smoke
   run_statusline_smoke
+  run_statusline_btw_smoke
   run_statusline_plugin_smoke
   bash -n install.sh
   run_zsh_syntax

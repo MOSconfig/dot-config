@@ -15,6 +15,7 @@
 #   .context_window.used_percentage          -> Context bar (color-graded)
 #   .context_window.context_window_size      -> Context capacity
 #   .cost.total_lines_added/removed          -> Diff (+a -r)
+#   .session_id                              -> btw (mermaid-tty's marker)
 #
 # Layout: a padding row, then two lines.
 #   L1: Model (aqua), Effort (purple), WakaTime (yellow), Venv (green), and
@@ -22,7 +23,10 @@
 #       green/yellow/red, and the capacity, e.g. "45% of 1.0M".
 #   L2: Branch (orange) with its indicators (✓ clean or ● dirty, aqua
 #       ahead/behind, and a purple stash icon with the count only when
-#       there are stashes), then Diff (blue): this session's +added in green
+#       there are stashes), then btw (yellow): "answering Ns" while
+#       mermaid-tty answers a /btw in this session (its marker,
+#       ~/.cache/mermaid-tty/btw-<session_id>, is 1 and under 300 s old),
+#       then Diff (blue): this session's +added in green
 #       and -removed in red, nonzero parts only, hidden when both are 0;
 #       then Path (aqua) at the right end. With COLUMNS known, the path is
 #       right-aligned and shortened from the left (…/) to fit; otherwise it
@@ -43,10 +47,21 @@
 
 set -u
 
+# A file's change time in epoch seconds, or 0 when it cannot be read. GNU
+# stat is tried first: BSD's -f would print the file system there instead of
+# failing, and its output would be taken for a time. Anything but digits is 0.
+file_mtime() {
+  local t
+  t="$(stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null)" || t=0
+  case "$t" in '' | *[!0123456789]*) t=0 ;; esac
+  printf '%s' "$t"
+}
+
+
 # --- Configuration ---------------------------------------------------------
 # A literal `\n` token in SEGMENTS starts the next line. `path` is placed at
 # the right end of its line. Segments without data take no space.
-SEGMENTS="model effort waka venv ctx \n branch diff path"
+SEGMENTS="model effort waka venv ctx \n branch btw diff path"
 SEP=' │ '
 
 ICONS_ON=1
@@ -63,6 +78,7 @@ ICONS_ON=1
 #   U+F1AE flask            = EF 86 AE   Venv
 #   U+F1C0 database         = EF 87 80   Context
 #   U+F126 code-fork        = EF 84 A6   Branch
+#   U+F27A commenting       = EF 89 BA   btw
 #   U+F187 archive          = EF 86 87   Stash
 #   U+F440 diff             = EF 91 80   Diff
 #   U+F07C folder-open      = EF 81 BC   Path
@@ -72,6 +88,7 @@ ICON_WAKA=$'\xef\x84\x9c'
 ICON_VENV=$'\xef\x86\xae'
 ICON_CTX=$'\xef\x87\x80'
 ICON_BRANCH=$'\xef\x84\xa6'
+ICON_BTW=$'\xef\x89\xba'
 ICON_STASH=$'\xef\x86\x87'
 ICON_DIFF=$'\xef\x91\x80'
 ICON_PATH=$'\xef\x81\xbc'
@@ -128,6 +145,7 @@ f11c|${ICON_WAKA}|WakaTime
 f1ae|${ICON_VENV}|Venv
 f1c0|${ICON_CTX}|Context
 f126|${ICON_BRANCH}|Branch
+f27a|${ICON_BTW}|btw
 f187|${ICON_STASH}|Stash
 f440|${ICON_DIFF}|Diff
 f07c|${ICON_PATH}|Path
@@ -196,6 +214,39 @@ label() {
   else
     printf -v __LBL '%s%s%s ' "$C_MUTED" "$text" "$C_RESET"
   fi
+}
+
+# The marker mermaid-tty writes while it answers a /btw in session id, into
+# BTW_FILE; false for an id that is not a plain lowercase ASCII name, so
+# nothing else is ever put into the path, and a disk that ignores case never
+# gives two ids one file (session ids are lowercase UUIDs). The class is
+# spelled out, as a range would follow the locale and let other letters in.
+btw_marker() {
+  BTW_FILE=""
+  case "$1" in
+    '' | *[!abcdefghijklmnopqrstuvwxyz0123456789_-]*) return 1 ;;
+  esac
+  BTW_FILE="$HOME/.cache/mermaid-tty/btw-$1"
+}
+
+# Whether the marker at $1 says a /btw is being answered: it is one or two
+# bytes, 1 and an optional newline, and changed under 300 s ago; its age in
+# seconds goes to BTW_AGE. The size is checked first, as bash cannot hold a NUL
+# in a variable: a 1 followed by a NUL and more would read as just 1.
+btw_age() {
+  local mark="" size now mtime
+  BTW_AGE=0
+  [ -f "$1" ] || return 1
+  size="$(wc -c <"$1" 2>/dev/null)" || return 1
+  size="${size//[!0123456789]/}"
+  case "$size" in 1 | 2) ;; *) return 1 ;; esac
+  IFS= read -r -d '' mark <"$1" 2>/dev/null || true
+  case "$size:$mark" in "1:1" | "2:1"$'\n') ;; *) return 1 ;; esac
+  mtime="$(file_mtime "$1")"
+  [ "$mtime" -gt 0 ] || return 1
+  now="$(date +%s)"
+  BTW_AGE=$((now - mtime))
+  [ "$BTW_AGE" -ge 0 ] && [ "$BTW_AGE" -lt 300 ]
 }
 
 is_pos_int() {
@@ -390,7 +441,7 @@ __cwd_hash="$(printf '%s' "${PWD}" | cksum | awk '{print $1}')"
 __git_cache="$CACHE_DIR/git-${__cwd_hash}"
 __use_cache=0
 if [ -f "$__git_cache" ]; then
-  __mtime="$(stat -f %m "$__git_cache" 2>/dev/null || stat -c %Y "$__git_cache" 2>/dev/null || echo 0)"
+  __mtime="$(file_mtime "$__git_cache")"
   __age=$(( $(date +%s) - __mtime ))
   if [ "$__age" -lt 5 ]; then
     __use_cache=1
@@ -454,6 +505,58 @@ seg_branch() {
   fi
 }
 
+# btw — mermaid-tty answering a /btw side question in this session. With
+# MERMAID_TTY_BTW_STATUS=file, mermaid-tty writes 1 to its marker while it
+# answers and empties it after; a marker older than 300 s is a crashed or
+# stuck session's and stays hidden. The marker's age is how long it has run.
+# Only this session's one marker is looked at, so the render costs the same
+# however many past sessions left an empty one.
+seg_btw() {
+  [ -d "$HOME/.cache/mermaid-tty" ] || return 0
+  btw_session_id
+  btw_marker "$BTW_ID" || return 0
+  btw_age "$BTW_FILE" || return 0
+  btw_confirm_id "$BTW_ID" || return 0
+  label "$C_YELLOW" "$ICON_BTW" 'btw'
+  printf -v __SEG '%s%sanswering %ds%s' "$__LBL" "$C_FG" "$BTW_AGE" "$C_RESET"
+}
+
+# This session's id into BTW_ID, choosing which one marker to look at. When
+# the payload's text names "session_id" exactly once and escapes nothing, that
+# value is read straight from the text: nearly always, and with no jq. Any
+# other payload, with a nested id or an escaped key, is resolved by jq first,
+# so key order never decides which marker is read.
+btw_session_id() {
+  BTW_ID=""
+  local rest="${session_json#*\"session_id\"}"
+  if [ "$rest" != "$session_json" ] && [ "${rest#*\"session_id\"}" = "$rest" ] &&
+    [ "${session_json#*\\u}" = "$session_json" ] &&
+    [[ "$rest" =~ ^[[:space:]]*:[[:space:]]*\"([^\"]*)\" ]]; then
+    BTW_ID="${BASH_REMATCH[1]}"
+    return 0
+  fi
+  btw_top_id
+  BTW_ID="$BTW_TOP"
+}
+
+# The payload's top-level session_id into BTW_TOP, as jq reads the JSON whole
+# and checks it: empty unless it is a plain lowercase id.
+btw_top_id() {
+  BTW_TOP=""
+  command -v jq >/dev/null 2>&1 || return 0
+  BTW_TOP="$(printf '%s' "$session_json" |
+    jq -r '.session_id | if type == "string" and test("\\A[a-z0-9_-]+\\z") then . else empty end' 2>/dev/null)" ||
+    BTW_TOP=""
+}
+
+# Whether $1 is the payload's top-level session_id: a nested id, an escaped
+# key or a value with a newline or NUL cannot pass for it. Asked only once the
+# marker says a /btw is being answered.
+btw_confirm_id() {
+  btw_top_id
+  [ -n "$BTW_TOP" ] && [ "$BTW_TOP" = "$1" ]
+}
+
 # WakaTime — today's coding time as recorded by WakaTime. The `wakatime-cli
 # --today` call hits the network internally (~250ms), way too slow for
 # every render. Cache for 5 minutes; on a miss, kick off a background
@@ -467,7 +570,7 @@ seg_waka() {
   local now mtime val=""
   now="$(date +%s)"
   mtime=0
-  [ -f "$cf" ] && mtime="$(stat -f %m "$cf" 2>/dev/null || stat -c %Y "$cf" 2>/dev/null || echo 0)"
+  [ -f "$cf" ] && mtime="$(file_mtime "$cf")"
   if [ -f "$cf" ] && [ $((now - mtime)) -lt 300 ]; then
     read -r val <"$cf" 2>/dev/null || val=""
   else
@@ -478,19 +581,29 @@ seg_waka() {
     # cached value — invisible failure mode. (Reviewer flagged this.)
     if [ -d "$lock" ]; then
       local lock_mtime
-      lock_mtime="$(stat -f %m "$lock" 2>/dev/null || stat -c %Y "$lock" 2>/dev/null || echo 0)"
+      lock_mtime="$(file_mtime "$lock")"
       [ $((now - lock_mtime)) -gt 60 ] && rmdir "$lock" 2>/dev/null
     fi
     # Background refresh — don't block the render. mkdir-based lock so
     # multiple concurrent statusline runs don't all spawn fetchers. The
     # subshell's EXIT trap guarantees the lock is removed even if the
     # fetch hangs and we get killed mid-call.
+    # A fetch is tried at most once per 5 minutes, failed or not: the status
+    # line reruns every 2 s, and a failing CLI (offline, no key) would
+    # otherwise be started on every render. The stamp is read again once the
+    # lock is held, so two renders at once start one fetch, not two.
+    local tried="$CACHE_DIR/waka_today.tried"
     if mkdir "$lock" 2>/dev/null; then
-      (
-        trap 'rmdir "'"$lock"'" 2>/dev/null' EXIT
-        "$wt" --today >"$cf.tmp" 2>/dev/null \
-          && mv "$cf.tmp" "$cf" 2>/dev/null
-      ) &
+      if [ -f "$tried" ] && [ $((now - $(file_mtime "$tried"))) -lt 300 ]; then
+        rmdir "$lock" 2>/dev/null
+      else
+        : >"$tried" 2>/dev/null
+        (
+          trap 'rmdir "'"$lock"'" 2>/dev/null' EXIT
+          "$wt" --today >"$cf.tmp" 2>/dev/null \
+            && mv "$cf.tmp" "$cf" 2>/dev/null
+        ) &
+      fi
     fi
     # Serve stale value while the bg refresh runs (avoids flicker).
     [ -f "$cf" ] && read -r val <"$cf" 2>/dev/null

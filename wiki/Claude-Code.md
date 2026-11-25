@@ -74,7 +74,7 @@ Changing only `opusModel` does not select Opus at startup. `ANTHROPIC_MODEL`, th
 | `modelSettings.claude-sonnet-5.effortLevel` | `high`; Sonnet 5's saved effort preference |
 | `MODEL_REASONING_EFFORT` | `xhigh`; status-line fallback aligned with the launchers' `--effort xhigh` |
 | `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` | `16` |
-| `statusLine.refreshInterval` | `100` |
+| `statusLine.refreshInterval` | `2`; seconds, so mermaid-tty's `/btw` item shows while the answer runs. The script takes about 30 ms |
 | `theme` | `custom:apollo`; generated theme assets stay local |
 | `CLAUDE_CODE_TMUX_TRUECOLOR` | `"1"`; skip Claude's tmux 256-color cap |
 | `autoCompactEnabled` | `true` |
@@ -86,6 +86,7 @@ Changing only `opusModel` does not select Opus at startup. `ANTHROPIC_MODEL`, th
 | `tui` | `fullscreen`; the full-screen terminal UI |
 | `crossSessionInbound` | `accept`; take messages from other local Claude sessions without a prompt |
 | `cleanupPeriodDays` | `7`; delete session transcripts after 7 days of inactivity to save disk space (default 30) |
+| `MERMAID_TTY_BTW_STATUS` | `"file"`; mermaid-tty marks a `/btw` it is answering for the status line's btw item, not with its own row |
 | `CLAUDE_CODE_AUTO_MODE_SERVER` | `"0"`; auto mode uses classifier requests from Claude Code itself instead of server-side review. Permission checks stay on |
 
 `refreshInterval` belongs inside `statusLine`. The saved Opus preference uses `xhigh`; the saved Sonnet preference uses `high`. `MODEL_REASONING_EFFORT` is a status-line fallback, not an API effort control. The launchers pass `--effort xhigh`; an explicit effort on the `claude` command overrides it. No top-level `effortLevel` is managed. [Copilot CLI](Copilot-CLI.md) keeps its separate Astra/`xhigh` defaults.
@@ -177,11 +178,13 @@ Do not restore the old lifecycle counter hook.
 Claude and Copilot status lines share the same two-line design, locally generated Apollo colors, and five-second per-directory Git cache. A padding row comes first, then:
 
 1. model, effort, WakaTime, venv, and context last (a ten-cell bar, the percentage, and the capacity, such as `45% of 1.0M`)
-2. branch first, with its indicators (✓ clean or ● dirty, ahead/behind, and a stash icon with the count when there are stashes), then Diff (this session's `+added` in green and `-removed` in red, only the nonzero parts, hidden when both are 0), and the folder path at the right end
+2. branch first, with its indicators (✓ clean or ● dirty, ahead/behind, and a stash icon with the count when there are stashes), then btw (`answering Ns` while mermaid-tty answers a `/btw` in this session), then Diff (this session's `+added` in green and `-removed` in red, only the nonzero parts, hidden when both are 0), and the folder path at the right end
 
 Every item is an accent-colored Nerd Font icon, a muted label, and its value; a thin rule separates items, and an item without data is hidden. With `COLUMNS` known, the path is right-aligned and shortened from the left (`…/`) to fit; otherwise it follows the other items. `CLAUDE_STATUSLINE_PAD_TOP` sets the padding rows (default 1).
 
-Both scripts source the same generated Apollo color include. If it is missing or color is disabled, they remain readable without colors. Claude's custom status line has no live-subagent count or tree because Claude Code has native subagent UI. Copilot keeps the custom rows.
+WakaTime's figure is cached for five minutes, and a fetch is tried at most once in five minutes, failed or not, so the two-second refresh never starts a failing `wakatime-cli` on every render. Both scripts source the same generated Apollo color include. If it is missing or color is disabled, they remain readable without colors. Claude's custom status line has no live-subagent count or tree because Claude Code has native subagent UI. Copilot keeps the custom rows.
+
+The btw item reads mermaid-tty's marker, `~/.cache/mermaid-tty/btw-<session_id>`, keyed by the top-level `session_id` in the status line's input, a lowercase UUID; an id with any other character gets no marker, so a disk that ignores case never gives two sessions one file. Only that one marker is read, so the render costs the same however many empty markers past sessions left. The id is read straight from the text when the payload names `session_id` once and escapes nothing; otherwise `jq` resolves the top-level id first, so key order never decides which marker is read. `jq` also confirms the id is the top-level one once that marker says a `/btw` is being answered. It shows while the marker holds exactly `1` (a trailing newline aside) and was changed less than 300 seconds ago, with the seconds since then, and is hidden otherwise. A crashed session's marker therefore stops showing within five minutes. mermaid-tty writes the marker instead of its own row under the prompt because the tracked `env` sets `MERMAID_TTY_BTW_STATUS=file`. A `/btw` adds no reply, which would rerun the status line, so `refreshInterval` is 2 seconds. Copilot's status line has the same item for the shared layout, but mermaid-tty runs only in Claude Code, so it stays hidden there.
 
 ## Plugins
 
