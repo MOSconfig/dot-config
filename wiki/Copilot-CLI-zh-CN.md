@@ -85,7 +85,7 @@ source ~/.oh-my-zsh/custom/gg.zsh
 Copilot 状态栏与 Claude 共享两行设计和本机生成的 Apollo 颜色。最上面是一行留白，然后是：
 
 1. 模型、effort、请求、WakaTime、tasks（没有 subagent 运行时隐藏）、venv，最后是 context（十格进度条、百分比和容量）
-2. 先是 branch 及其标记（✓ 干净或 ● 有修改、领先/落后，有 stash 时显示 stash 图标和数量），然后是 Diff（本会话绿色的 `+新增` 和红色的 `-删除`，只显示非零部分，两者都为 0 时隐藏），文件夹路径在行的最右端
+2. 先是 branch 及其标记（✓ 干净或 ● 有修改、领先/落后，有 stash 时显示 stash 图标和数量），然后是 btw（mermaid-tty 的 `/btw` 项，与 Claude 状态栏共用；由于 mermaid-tty 只在 Claude Code 中运行，这里始终隐藏），然后是 Diff（本会话绿色的 `+新增` 和红色的 `-删除`，只显示非零部分，两者都为 0 时隐藏），文件夹路径在行的最右端
 
 每一项都是带强调色的 Nerd Font 图标、弱化的标签和值；项之间用细竖线分隔，没有数据的项会隐藏。已知 `COLUMNS` 时，路径右对齐，并从左侧缩短（`…/`）以适应宽度；否则路径跟在其他项后面。live-subagent rows 仍显示在两行下面。
 

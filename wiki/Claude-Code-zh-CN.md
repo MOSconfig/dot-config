@@ -74,7 +74,7 @@ Claude Code 2.1.281 能识别原生 Opus 5.5 身份。修改模型和 effort 默
 | `modelSettings.claude-sonnet-5.effortLevel` | `high`；Sonnet 5 保存的 effort 偏好 |
 | `MODEL_REASONING_EFFORT` | `xhigh`；状态栏回退值与启动器的 `--effort xhigh` 保持一致 |
 | `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` | `16` |
-| `statusLine.refreshInterval` | `100` |
+| `statusLine.refreshInterval` | `2`；单位为秒，使 mermaid-tty 的 `/btw` 项在回答期间显示。脚本约需 30 毫秒 |
 | `theme` | `custom:apollo`；生成的主题资源仍保留在本机 |
 | `CLAUDE_CODE_TMUX_TRUECOLOR` | `"1"`；跳过 Claude 的 tmux 256 色限制 |
 | `autoCompactEnabled` | `true` |
@@ -86,6 +86,7 @@ Claude Code 2.1.281 能识别原生 Opus 5.5 身份。修改模型和 effort 默
 | `tui` | `fullscreen`；全屏终端界面 |
 | `crossSessionInbound` | `accept`；无需确认即可接收本机其他 Claude 会话的消息 |
 | `cleanupPeriodDays` | `7`；会话记录闲置 7 天后删除，节省磁盘空间（默认 30） |
+| `MERMAID_TTY_BTW_STATUS` | `"file"`；mermaid-tty 为状态栏的 btw 项标记正在回答的 `/btw`，而不是显示自己的状态行 |
 | `CLAUDE_CODE_AUTO_MODE_SERVER` | `"0"`；auto 模式使用 Claude Code 自己发出的 classifier 请求，而不是服务端审查。权限检查仍然开启 |
 
 `refreshInterval` 必须放在 `statusLine` 里面。保存的 Opus 偏好使用 `xhigh`；保存的 Sonnet 偏好使用 `high`。`MODEL_REASONING_EFFORT` 是状态栏回退值，不控制 API effort。启动器传入 `--effort xhigh`；`claude` 命令上显式指定的 effort 会覆盖它。不管理顶层 `effortLevel`。[Copilot CLI](Copilot-CLI-zh-CN.md) 保留独立的 Astra/`xhigh` 默认值。
@@ -177,11 +178,13 @@ source ~/.oh-my-zsh/custom/cc.zsh
 Claude 与 Copilot 状态栏共享两行设计、本机生成的 Apollo 颜色和每目录五秒 Git cache。最上面是一行留白，然后是：
 
 1. 模型、effort、WakaTime、venv，最后是 context（十格进度条、百分比和容量，例如 `45% of 1.0M`）
-2. 先是 branch 及其标记（✓ 干净或 ● 有修改、领先/落后，有 stash 时显示 stash 图标和数量），然后是 Diff（本会话绿色的 `+新增` 和红色的 `-删除`，只显示非零部分，两者都为 0 时隐藏），文件夹路径在行的最右端
+2. 先是 branch 及其标记（✓ 干净或 ● 有修改、领先/落后，有 stash 时显示 stash 图标和数量），然后是 btw（mermaid-tty 在本会话中回答 `/btw` 期间显示 `answering Ns`），然后是 Diff（本会话绿色的 `+新增` 和红色的 `-删除`，只显示非零部分，两者都为 0 时隐藏），文件夹路径在行的最右端
 
 每一项都是带强调色的 Nerd Font 图标、弱化的标签和值；项之间用细竖线分隔，没有数据的项会隐藏。已知 `COLUMNS` 时，路径右对齐，并从左侧缩短（`…/`）以适应宽度；否则路径跟在其他项后面。`CLAUDE_STATUSLINE_PAD_TOP` 设置留白行数（默认 1）。
 
-两个脚本读取同一个本机生成 Apollo 颜色 include。文件缺失或禁用颜色时，它们仍会输出可读的无色内容。Claude 自定义状态栏没有 live-subagent 数量或树，因为 Claude Code 已有原生 subagent UI。Copilot 保留自定义 rows。
+WakaTime 的数值缓存五分钟；无论成功与否，五分钟内最多尝试获取一次，因此两秒的刷新间隔不会在每次渲染时都启动一个失败的 `wakatime-cli`。两个脚本读取同一个本机生成 Apollo 颜色 include。文件缺失或禁用颜色时，它们仍会输出可读的无色内容。Claude 自定义状态栏没有 live-subagent 数量或树，因为 Claude Code 已有原生 subagent UI。Copilot 保留自定义 rows。
+
+btw 项读取 mermaid-tty 的标记 `~/.cache/mermaid-tty/btw-<session_id>`，按状态栏输入中顶层的 `session_id`（小写 UUID）区分会话；含其他字符的 id 没有标记，因此不区分大小写的磁盘也不会让两个会话共用一个文件。只读取这一个标记，因此无论过去的会话留下多少空标记，渲染开销都不变。当输入只出现一次 `session_id` 且没有转义时，直接从文本读取 id；否则先由 `jq` 解析出顶层 id，因此键的顺序不会决定读取哪个标记。一旦该标记表明正在回答 `/btw`，`jq` 还会确认这个 id 是顶层的那一个。标记内容恰好为 `1`（结尾换行除外）且在 300 秒内修改过时显示，并显示从那时起的秒数，否则隐藏。因此，会话崩溃后留下的标记最多五分钟后就不再显示。由于受管理的 `env` 设置了 `MERMAID_TTY_BTW_STATUS=file`，mermaid-tty 会写这个标记，而不是在提示符下方显示自己的状态行。`/btw` 不会产生回复，也就不会让状态栏重新运行，因此 `refreshInterval` 为 2 秒。Copilot 状态栏为保持共同布局也有同样的项，但 mermaid-tty 只在 Claude Code 中运行，所以在那里始终隐藏。
 
 ## Plugins
 
