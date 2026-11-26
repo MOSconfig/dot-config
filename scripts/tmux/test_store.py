@@ -43,6 +43,19 @@ class FormatTests(unittest.TestCase):
         rows = store.decode_rows(''.join(framed([name, '$' + str(i)]) for i, name in enumerate(names)), schema)
         self.assertEqual([row['session_name'] for row in rows], names)
 
+    def test_literal_keeps_hash_runs_before_a_bracket(self):
+        cases = {'a#[b': 'a#[b', 'p##[a': 'p##[a', 'p###[a': 'p###[a', 'a#[b]#{c}': 'a#[b]##{c}',
+                 '#': '##', 'x#': 'x##', '##x': '####x', '#[#S]': '#[##S]', 'p;': 'p\;',
+                 '#{pid} #(id);': '##{pid} ##(id)\;'}
+        for raw, sent in cases.items():
+            with self.subTest(raw=raw): self.assertEqual(store.literal(raw), sent)
+
+    def test_literal_is_linear_on_long_hash_runs(self):
+        start = __import__('time').monotonic()
+        store.literal('#' * 16000 + '[')
+        store.literal('#' * 16000 + 'x')
+        self.assertLess(__import__('time').monotonic() - start, 0.2)
+
     def test_reject_malformed_framing_controls_and_types(self):
         for output in ['work\t$1\n', 'TMS1:4:work2:$1', 'TMS1:9:short\n',
                        framed(['bad\nname', '$1']), framed(['ok', '$bad']),
@@ -566,6 +579,11 @@ class OpenTests(unittest.TestCase):
         self.assertEqual(store.argv_literal('end;'), 'end\\;')
         with self.assertRaises(store.StoreError): store.argv_literal('bad\nline')
 
+    def test_validate_open_accepts_style_markers(self):
+        styled = self.home / 'folder#[fg=red]'
+        styled.mkdir()
+        self.assertEqual(self.request(styled, 'fix #[bold]')[:3], (str(styled), 'folder#[fg=red]', 'fix #[bold]'))
+
     def test_validate_open_returns_slug_and_literal_parts(self):
         directory, session, name, argv = self.request()
         self.assertEqual((directory, session, name, argv), (str(self.project), 'my_app', '✨ title', self.argv))
@@ -587,8 +605,6 @@ class OpenTests(unittest.TestCase):
             'executable file dir': dict(directory=self.shell),
             'unsearchable dir': dict(directory=locked),
             'unrepresentable dir': dict(directory=nested),
-            'style marker dir': dict(directory=styled),
-            'style marker name': dict(name='fix #[bold]'),
             'empty name': dict(name=''),
             'control name': dict(name='a\tb'),
             'single operand': dict(argv=[str(self.shell)]),
@@ -864,6 +880,29 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(store.structural(self.manager.capture(self.runtime)), store.structural(before))
         self.manager.delete(name)
         self.manager.wait_absent(self.runtime)
+
+    def test_private_style_marker_names_and_cwds_round_trip(self):
+        styled = self.home / 'p#[bold] ##[x] #{y}'
+        styled.mkdir()
+        output = self.manager.bootstrap(self.runtime, 's#[a]##[b]', cwd=str(styled), window_name='w#[c]')
+        sid, wid, pane = output.split('|')
+        got = self.manager.command(self.runtime, ['display-message', '-p', '-t', pane,
+                                                  '#{session_name}|#{window_name}|#{pane_start_path}'])
+        self.assertEqual(got, f's#[a]##[b]|w#[c]|{styled}')
+        self.manager.command(self.runtime, ['split-window', '-t', pane, '-c', store.literal(str(styled))])
+        self.manager.command(self.runtime, ['new-window', '-d', '-t', sid + ':', '-n', store.literal('second #[x]'),
+                                            '-c', store.literal(str(styled))])
+        active = self.manager.record_active(self.runtime)
+        with patch.dict(os.environ, {'TMUX': self.manager.socket + f",{active['server']['pid']},0", 'TMUX_PANE': pane}):
+            self.manager.rename('r#[z] ##[q];')
+        before = self.manager.capture(self.runtime)
+        names = [w['name'] for s in before['sessions'] for w in s['windows']]
+        self.assertEqual(sorted(names), ['r#[z] ##[q];', 'second #[x]'])
+        self.assertEqual({p['cwd'] for s in before['sessions'] for w in s['windows'] for p in w['panes']}, {str(styled)})
+        self.manager.command(self.runtime, ['kill-server'])
+        self.manager.wait_absent(self.runtime)
+        self.manager.restore(self.runtime, before)
+        self.assertEqual(store.structural(self.manager.capture(self.runtime)), store.structural(before))
 
     def test_private_roundtrip_multiple_sessions_windows_and_literal_names(self):
         self.config.write_text(self.config.read_text() + 'set -g renumber-windows on\n')

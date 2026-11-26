@@ -36,8 +36,9 @@ function cc {
     return
   fi
   DISABLE_AUTO_TITLE=true
-  print -Pn "\e]2;${title}\a"
-  print -Pn "\e]1;${title}\a"
+  # -r: send the title literally; no prompt (%) or backslash expansion.
+  print -rn -- $'\e]2;'"$title"$'\a'
+  print -rn -- $'\e]1;'"$title"$'\a'
   if [[ -n "$RMUX" ]] && (( $+commands[rmux] )); then
     # RMUX reads a trailing ';' as a command separator; escape it.
     local rmux_title=$title
