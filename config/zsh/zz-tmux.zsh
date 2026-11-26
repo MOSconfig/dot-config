@@ -38,14 +38,14 @@ function _mux_runtime_ok {
 # Print the backend cc/gg open in: tmux first, then RMUX.
 function _mux_backend {
   emulate -L zsh
-  if (( $+functions[_tmux_store] )) && _tmux_store_path >/dev/null &&
+  if (( $+functions[_tmux_store] && $+functions[_tmux_store_path] )) && _tmux_store_path >/dev/null &&
       _mux_runtime_ok $_mux_tmux_runtimes; then
     print tmux
     return 0
   fi
   local runtime
   for runtime in $_mux_rmux_runtimes; do [[ -f "$runtime" ]] && break; runtime=; done
-  if (( $+functions[_rmux_store] )) && _rmux_store_path >/dev/null &&
+  if (( $+functions[_rmux_store] && $+functions[_rmux_store_path] )) && _rmux_store_path >/dev/null &&
       _mux_runtime_ok $_mux_rmux_runtimes &&
       [[ -f "${runtime:h}/rmux-daemon" && -x "${runtime:h}/rmux-daemon" ]]; then
     print rmux

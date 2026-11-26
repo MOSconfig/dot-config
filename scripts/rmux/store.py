@@ -33,6 +33,8 @@ def validate_rmux_open(args):
     # RMUX 0.10 (probed): -c expands '##'/'#{' but breaks if '#[' is doubled; -s and rename double '\'.
     require('#' not in request[0] and '\\' not in request[0], 'RMUX open DIR cannot contain # or \\')
     require('\\' not in request[2], 'RMUX open NAME cannot contain \\')
+    # RMUX reports non-printable name characters (e.g. U+200D) octal-escaped, so reuse would miss.
+    require(request[1].isprintable(), 'RMUX open session name must be printable')
     return request
 
 

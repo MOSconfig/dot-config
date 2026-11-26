@@ -232,6 +232,8 @@ sys.exit(int(os.environ.get('STUB_STATUS', '0')))
             'no tmux runtime': ('_mux_tmux_runtimes=(/nonexistent/tmux); ', {}),
             'directory tmux runtime': (f'_mux_tmux_runtimes=({shlex.quote(str(self.home))}); ', {}),
             'no store function': ('unfunction _tmux_store; ', {}),
+            'no tmux path resolver': ('unfunction _tmux_store_path; '
+                                      'command_not_found_handler() { return 0; }; ', {}),
             'stale helper hash': (f'rm {shlex.quote(str(self.bin / "tmux-store"))}; '
                                   f'hash tmux-store={shlex.quote(str(self.home))}; ', {}),
             'first runtime not executable': (
@@ -290,6 +292,8 @@ sys.exit(int(os.environ.get('STUB_STATUS', '0')))
             'first rmux not executable': (f'_mux_rmux_runtimes=({shlex.quote(str(self.home / "plain"))} '
                                           f'{shlex.quote(str(self.rmux))}); '),
             'no rmux store function': 'unfunction _rmux_store; ',
+            'no rmux path resolver': ('unfunction _rmux_store_path; '
+                                      'command_not_found_handler() { return 0; }; '),
         }
         (self.home / 'plain').write_text('not executable\n')
         for label, extra in cases.items():

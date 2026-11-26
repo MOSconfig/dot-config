@@ -254,10 +254,13 @@ class OpenTests(unittest.TestCase):
 
     def test_validate_shares_the_native_rules_but_allows_style_markers(self):
         self.assertEqual(self.request(name='fix #[bold] #{x}')[2], 'fix #[bold] #{x}')
-        hashed, slashed = self.home / 'p#[bold]', self.home / 'a\\b'
-        hashed.mkdir()
-        slashed.mkdir()
+        hashed, slashed, joined = self.home / 'p#[bold]', self.home / 'a\\b', self.home / 'team-‍tools'
+        for path in (hashed, slashed, joined): path.mkdir()
+        for path, slug in ((self.home / '日本', '日本'), (self.home / 'café', 'café')):
+            path.mkdir()
+            self.assertEqual(self.request(path)[1], slug)
         for label, kwargs in {'hash dir': dict(directory=hashed),
+                              'escaped session name': dict(directory=joined),
                               'backslash dir': dict(directory=slashed),
                               'backslash name': dict(name='a\\b'),
                               'relative dir': dict(directory='relative'),
@@ -272,6 +275,13 @@ class OpenTests(unittest.TestCase):
                               ('empty rmux', lambda: patch.dict(os.environ, {'RMUX': ''}))]:
             with self.subTest(label), change():
                 with self.assertRaises(store.StoreError): self.request()
+
+    def test_session_lookup_matches_reported_unicode_names(self):
+        runtime = {'hash': 'h', 'path': str(self.bin), 'files': {}}
+        rows = [{'session_name': '日本', 'session_id': '$1'}, {'session_name': 'café', 'session_id': '$2'}]
+        with patch.object(self.store, 'json_command', return_value=rows):
+            self.assertEqual(self.store.session_id(runtime, '日本'), '$1')
+            self.assertEqual(self.store.session_id(runtime, 'café'), '$2')
 
     def test_escapes_match_rmux_parsing(self):
         self.assertEqual(store.rmux_arg('n #{x} #[y];'), 'n #{x} #[y]\;')
