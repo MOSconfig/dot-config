@@ -1,7 +1,7 @@
 # gg [title]
 #
-# On macOS outside tmux/RMUX with a terminal, opens a native tmux window in
-# $PWD instead (see _mux_should_wrap in zz-tmux.zsh); CC_GG_INLINE=1 opts out.
+# On macOS outside tmux/RMUX with a terminal, opens a window in $PWD in native
+# tmux, else RMUX (see _mux_backend in zz-tmux.zsh); CC_GG_INLINE=1 opts out.
 #
 # Set the current terminal tab + window title to [title], then launch
 # `copilot` in the current shell. If title is omitted, use the current

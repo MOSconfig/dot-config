@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import io
 import json
 import os
 from pathlib import Path
@@ -214,6 +215,129 @@ class StoreTests(unittest.TestCase):
         with patch('store.Store') as factory:
             self.assertEqual(store.main(['restart', 'anything']), 2)
             factory.assert_not_called()
+
+
+class OpenTests(unittest.TestCase):
+    """rmux-store open: the RMUX fallback for cc/gg outside a multiplexer."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix='rmux-store-open-')
+        self.addCleanup(self.temp.cleanup)
+        self.home = Path(self.temp.name).resolve()
+        self.bin = self.home / 'bin'
+        self.bin.mkdir()
+        for name in ['rmux', 'rmux-daemon']:
+            (self.bin / name).write_bytes((name + '-test').encode())
+            (self.bin / name).chmod(0o755)
+        self.project = self.home / 'my.app'
+        self.project.mkdir()
+        self.shell = self.home / 'zsh'
+        self.shell.write_text('#!/bin/sh\n')
+        self.shell.chmod(0o700)
+        self.argv = [str(self.shell), '-lic', 'cc "$@"', str(self.shell), 'cc', 'x #{y};']
+        self.environment = patch.dict(os.environ, {}, clear=True)
+        self.environment.start()
+        self.addCleanup(self.environment.stop)
+        for target, value in ((store.os, ('isatty', True)), (store.sys, ('platform', 'darwin'))):
+            if value[0] == 'isatty':
+                stub = patch.object(target, 'isatty', return_value=True)
+            else:
+                stub = patch.object(target, 'platform', 'darwin')
+            stub.start()
+            self.addCleanup(stub.stop)
+        self.store = store.Store(home=self.home, installed=self.bin / 'rmux', socket=self.home / 'sock')
+        self.runtime = {'hash': 'h', 'path': str(self.bin), 'files': {}}
+        self.active = {'version': 1, 'runtime': self.runtime, 'server': {'pid': 42, 'start': 's', 'socket': '/x'}}
+
+    def request(self, directory=None, name='✨ title', argv=None):
+        return store.validate_open([str(directory or self.project), name] + (self.argv if argv is None else argv))
+
+    def test_validate_shares_the_native_rules_but_allows_style_markers(self):
+        styled = self.home / 'folder#[fg=red]'
+        styled.mkdir()
+        self.assertEqual(self.request(styled, 'fix #[bold]')[:3], (str(styled), 'folder#[fg=red]', 'fix #[bold]'))
+        for label, kwargs in {'relative dir': dict(directory='relative'),
+                              'file program': dict(argv=[str(self.project / 'nope'), '-c']),
+                              'single operand': dict(argv=[str(self.shell)]),
+                              'control name': dict(name='a\nb')}.items():
+            with self.subTest(label), patch.object(store, 'Store') as factory:
+                with self.assertRaises(store.StoreError): self.request(**kwargs)
+                factory.assert_not_called()
+        for label, change in [('stdout', lambda: patch.object(store.os, 'isatty', side_effect=lambda fd: fd != 1)),
+                              ('linux', lambda: patch.object(store.sys, 'platform', 'linux')),
+                              ('empty rmux', lambda: patch.dict(os.environ, {'RMUX': ''}))]:
+            with self.subTest(label), change():
+                with self.assertRaises(store.StoreError): self.request()
+
+    def test_escapes_match_rmux_parsing(self):
+        self.assertEqual(store.rmux_dir('/w/a#{x}##b'), '/w/a##{x}####b')
+        self.assertEqual(store.rmux_arg('n #{x} #[y];'), 'n #{x} #[y]\;')
+        with self.assertRaises(store.StoreError): store.rmux_arg('bad\nline')
+
+    def test_cold_open_bootstraps_records_and_attaches_exact_window(self):
+        project = self.home / 'p#{x}'
+        project.mkdir()
+        with patch.object(self.store, 'ensure_active', return_value=dict(self.active, server=None)), \
+             patch.object(self.store, 'command', return_value='$3|@7|%9') as command, \
+             patch.object(self.store, 'probe', return_value={'pid': 9}), \
+             patch.object(self.store, 'verify_process'), patch.object(self.store, 'process_info', return_value={'ppid': 1}), \
+             patch.object(self.store, 'record_active') as record, patch.object(store.os, 'execve') as execute:
+            self.store.open(*self.request(project, 'w;'))
+            args = command.call_args.args[1]
+            self.assertEqual(args[:1], ['new-session'])
+            self.assertEqual(args[args.index('-s') + 1], 'p#{x}')
+            self.assertEqual(args[args.index('-c') + 1], str(self.home / 'p##{x}'))
+            self.assertEqual(args[args.index('-n') + 1], 'w\;')
+            self.assertEqual(args[-len(self.argv):], self.argv[:-1] + ['x #{y}\;'])
+            self.assertFalse(command.call_args.kwargs.get('no_start', True))
+            record.assert_called_once_with(self.runtime)
+            argv, env = execute.call_args.args[1:]
+            self.assertEqual(argv[-3:], ['attach-session', '-t', '$3:@7'])
+            self.assertNotIn('RMUX', env)
+            self.assertEqual(env['RMUX_DISABLE_TMUX_FALLBACK'], '1')
+
+    def test_open_without_session_creates_it(self):
+        with patch.object(self.store, 'ensure_active', return_value=self.active), \
+             patch.object(self.store, 'session_id', return_value=None), \
+             patch.object(self.store, 'command', return_value='$4|@8|%1') as command, \
+             patch.object(store.os, 'execve') as execute:
+            self.store.open(*self.request())
+            args = command.call_args.args[1]
+            self.assertEqual(args[args.index('-s') + 1], 'my_app')
+            self.assertEqual(args[-len(self.argv):], self.argv[:-1] + ['x #{y}\;'])
+            self.assertEqual(execute.call_args.args[1][-1], '$4:@8')
+
+    def test_open_with_session_adds_window_and_targets_it(self):
+        with patch.object(self.store, 'ensure_active', return_value=self.active), \
+             patch.object(self.store, 'session_id', return_value='$2'), \
+             patch.object(self.store, 'command', return_value='$2:@5') as command, \
+             patch.object(store.os, 'execve') as execute:
+            self.store.open(*self.request(name='w #{x}'))
+            command.assert_called_once_with(self.runtime, [
+                'new-window', '-d', '-P', '-F', '#{session_id}:#{window_id}', '-t', '$2:',
+                '-c', str(self.project), '-n', 'w #{x}'] + self.argv[:-1] + ['x #{y}\;'])
+            self.assertEqual(execute.call_args.args[1][-3:], ['attach-session', '-t', '$2:@5'])
+
+    def test_open_refuses_malformed_target_and_protocol_errors(self):
+        with patch.object(self.store, 'ensure_active', return_value=self.active), \
+             patch.object(self.store, 'session_id', return_value='$2'), \
+             patch.object(self.store, 'command', return_value='$2:@x'), patch.object(store.os, 'execve') as execute:
+            with self.assertRaises(store.StoreError): self.store.open(*self.request())
+            execute.assert_not_called()
+        with patch.object(self.store, 'ensure_active', side_effect=store.StoreError('protocol mismatch')), \
+             patch.object(self.store, 'command') as command:
+            with self.assertRaises(store.StoreError): self.store.open(*self.request())
+            command.assert_not_called()
+
+    def test_cli_open_validates_before_store_and_names_the_opt_out(self):
+        with patch('store.Store') as factory, patch('sys.stderr', new_callable=io.StringIO) as err:
+            self.assertEqual(store.main(['open', 'relative', 'n', str(self.shell), '-c']), 1)
+            self.assertEqual(store.main(['open', str(self.project)]), 2)
+            factory.assert_not_called()
+            self.assertEqual(err.getvalue().count('CC_GG_INLINE=1'), 2)
+        with patch('store.Store') as factory:
+            self.assertEqual(store.main(['open', str(self.project), 'n'] + self.argv), 0)
+            factory.return_value.open.assert_called_once_with(str(self.project), 'my_app', 'n', self.argv)
 
 
 @unittest.skipUnless(os.environ.get('RMUX_STORE_INTEGRATION') == '1' and Path('/opt/homebrew/bin/rmux').exists(), 'opt-in disposable runtime test')

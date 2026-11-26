@@ -17,8 +17,8 @@ import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'mux'))
 from workspace import (PrivateState, StoreError, digest, identifier, integer,
-                       make_snapshot, parse_layout, require, structural, text,
-                       validate_snapshot)
+                       make_snapshot, parse_layout, require, session_slug, structural, text,
+                       validate_open as shared_validate_open, validate_snapshot)
 
 SESSION = {'session_name': 'text', 'session_id': '$', 'session_windows': 'int', 'session_grouped': 'flag'}
 WINDOW = {'session_name': 'text', 'window_id': '@', 'window_index': 'int', 'window_name': 'text',
@@ -116,29 +116,11 @@ def argv_literal(value):
     return value[:-1] + '\\;' if value.endswith(';') else value
 
 
-def session_slug(directory):
-    name = re.sub(r'[.:]', '_', os.path.basename(directory.rstrip('/'))) or 'root'
-    return '_' + name[1:] if name.startswith('-') else name
-
-
 def validate_open(args):
-    require(len(args) >= 4, 'open requires DIR NAME PROGRAM ARG...')
-    directory, name, argv = args[0], args[1], list(args[2:])
-    require(os.isatty(0) and os.isatty(1), 'open needs a terminal on stdin and stdout')
-    require('RMUX' not in os.environ, 'cannot open native tmux inside RMUX; detach first')
-    require(sys.platform == 'darwin', 'open supports macOS only')
-    text(directory)
-    require(os.path.isabs(directory) and os.path.isdir(directory) and os.access(directory, os.X_OK),
-            'open DIR must be an absolute, searchable directory')
-    session = text(session_slug(directory), name=True)
-    text(name)
+    request = shared_validate_open(args)
     # tmux 3.8 keeps '#[' as a style marker even when '#' is doubled, so -c/-s/-n would change.
-    require('#[' not in directory and '#[' not in name, 'open DIR and NAME cannot contain #[')
-    for item in argv:
-        text(item)
-    require(os.path.isabs(argv[0]) and os.path.isfile(argv[0]) and os.access(argv[0], os.X_OK),
-            'open PROGRAM must be an absolute executable file')
-    return directory, session, name, argv
+    require('#[' not in request[0] and '#[' not in request[2], 'open DIR and NAME cannot contain #[')
+    return request
 
 
 def saved_name(value):
