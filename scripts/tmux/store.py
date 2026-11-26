@@ -125,13 +125,15 @@ def validate_open(args):
     require(len(args) >= 4, 'open requires DIR NAME PROGRAM ARG...')
     directory, name, argv = args[0], args[1], list(args[2:])
     require(os.isatty(0) and os.isatty(1), 'open needs a terminal on stdin and stdout')
-    require(not os.environ.get('RMUX'), 'cannot open native tmux inside RMUX; detach first')
+    require('RMUX' not in os.environ, 'cannot open native tmux inside RMUX; detach first')
     require(sys.platform == 'darwin', 'open supports macOS only')
     text(directory)
     require(os.path.isabs(directory) and os.path.isdir(directory) and os.access(directory, os.X_OK),
             'open DIR must be an absolute, searchable directory')
     session = text(session_slug(directory), name=True)
     text(name)
+    # tmux 3.8 keeps '#[' as a style marker even when '#' is doubled, so -c/-s/-n would change.
+    require('#[' not in directory and '#[' not in name, 'open DIR and NAME cannot contain #[')
     for item in argv:
         text(item)
     require(os.path.isabs(argv[0]) and os.path.isfile(argv[0]) and os.access(argv[0], os.X_OK),
@@ -810,7 +812,8 @@ def main(args=None):
     arity = {'attach': 2, 'delete': 2, 'rename': 2, 'list': 1, 'restart': 1, 'help': 1}
     if command == 'open':
         if len(args) < 5:
-            print('Usage: tmux-store open DIR NAME PROGRAM ARG...', file=sys.stderr)
+            print('Usage: tmux-store open DIR NAME PROGRAM ARG...\n'
+                  'Set CC_GG_INLINE=1 to run cc/gg without tmux.', file=sys.stderr)
             return 2
         try:
             request = validate_open(args[1:])

@@ -578,6 +578,8 @@ class OpenTests(unittest.TestCase):
         self.addCleanup(locked.chmod, 0o700)
         nested = self.home / 'bad\nname'
         nested.mkdir()
+        styled = self.home / 'folder#[fg=red]'
+        styled.mkdir()
         cases = {
             'relative dir': dict(directory='relative'),
             'missing dir': dict(directory=self.home / 'missing'),
@@ -585,6 +587,8 @@ class OpenTests(unittest.TestCase):
             'executable file dir': dict(directory=self.shell),
             'unsearchable dir': dict(directory=locked),
             'unrepresentable dir': dict(directory=nested),
+            'style marker dir': dict(directory=styled),
+            'style marker name': dict(name='fix #[bold]'),
             'empty name': dict(name=''),
             'control name': dict(name='a\tb'),
             'single operand': dict(argv=[str(self.shell)]),
@@ -602,7 +606,8 @@ class OpenTests(unittest.TestCase):
         for label, change in [('stdin', lambda: patch.object(store.os, 'isatty', side_effect=lambda fd: fd != 0)),
                               ('stdout', lambda: patch.object(store.os, 'isatty', side_effect=lambda fd: fd != 1)),
                               ('linux', lambda: patch.object(store.sys, 'platform', 'linux')),
-                              ('rmux', lambda: patch.dict(os.environ, {'RMUX': '/r,1,0'}))]:
+                              ('rmux', lambda: patch.dict(os.environ, {'RMUX': '/r,1,0'})),
+                              ('empty rmux', lambda: patch.dict(os.environ, {'RMUX': ''}))]:
             with self.subTest(label), change():
                 with self.assertRaises(store.StoreError): self.request()
 
@@ -671,8 +676,10 @@ class OpenTests(unittest.TestCase):
             self.assertEqual(store.main(['open', 'relative', 'n', str(self.shell), '-c']), 1)
             factory.assert_not_called()
             self.assertIn('CC_GG_INLINE=1', err.getvalue())
+        with patch.object(store, 'Store') as factory, patch('sys.stderr', new_callable=io.StringIO) as err:
             self.assertEqual(store.main(['open', str(self.project)]), 2)
             factory.assert_not_called()
+            self.assertIn('CC_GG_INLINE=1', err.getvalue())
         with patch.object(store, 'Store') as factory:
             self.assertEqual(store.main(['open', str(self.project), 'n'] + self.argv), 0)
             factory.return_value.open.assert_called_once_with(str(self.project), 'my_app', 'n', self.argv)

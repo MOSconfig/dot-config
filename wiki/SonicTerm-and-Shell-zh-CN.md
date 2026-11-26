@@ -192,7 +192,7 @@ ts            # 保存此 socket 的全部会话，确认后重启并恢复
 
 `cc [标题]` 和 `gg [标题]` 会向 SonicTerm 发送 OSC 1 和 OSC 2 标题。它们先检查 RMUX 并直接重命名其窗口；在原生 tmux 中，通过 `tmux-store` 重命名当前 socket 的当前窗口。没有标题时使用当前路径。
 
-在 macOS 上，如果当前不在 tmux 或 RMUX 中，`cc` 和 `gg` 会在原生 tmux 中打开，让 [mux-agents](Claude-Code-zh-CN.md) 有窗格可用。它们运行 `tmux-store open`：会话以当前文件夹命名（`.`、`:` 和开头的 `-` 变成 `_`，`/` 变成 `root`）；会话已存在时新增一个窗口。窗口从当前文件夹启动，在其中运行 `cc` 或 `gg`，代理退出后保留 shell。`cc`/`gg` 返回连接（attach）的状态，不会再在当前 shell 里启动一次。以下情况仍像以前一样直接运行：stdin 或 stdout 不是终端、Linux 或 Windows、缺少助手或 Homebrew tmux、或设置了 `CC_GG_INLINE=1`。`tmux-store open` 失败时，错误信息会提示这个开关。RMUX 和 Linux 支持见 [#169](https://github.com/MOSconfig/dot-config/issues/169)。
+在 macOS 上，如果当前不在 tmux 或 RMUX 中（两个变量都未设置），`cc` 和 `gg` 会在原生 tmux 中打开，让 [mux-agents](Claude-Code-zh-CN.md) 有窗格可用。它们运行 `tmux-store open`：会话以当前文件夹命名（`.`、`:` 和开头的 `-` 变成 `_`，`/` 变成 `root`）；会话已存在时新增一个窗口。窗口从当前文件夹启动，在其中运行 `cc` 或 `gg`，代理退出后保留 shell。`cc`/`gg` 返回连接（attach）的状态，不会再在当前 shell 里启动一次。以下情况仍像以前一样直接运行：stdin 或 stdout 不是终端、Linux 或 Windows、缺少助手或 Homebrew tmux、或设置了 `CC_GG_INLINE=1`。`tmux-store open` 失败时，错误信息会提示这个开关。RMUX 和 Linux 支持见 [#169](https://github.com/MOSconfig/dot-config/issues/169)。
 
 原生路径不会修改 `PATH`，也不会替换全局 `tmux` 命令。RMUX 的私有 teammate shim 保持独立。CLI 运行时会设置 `DISABLE_AUTO_TITLE`，所以 oh-my-zsh 不会覆盖标题。
 

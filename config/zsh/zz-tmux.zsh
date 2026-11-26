@@ -17,12 +17,14 @@ typeset -ga _mux_tmux_runtimes=(/opt/homebrew/bin/tmux /usr/local/bin/tmux)
 
 function _mux_should_wrap {
   emulate -L zsh
-  [[ -z "${TMUX:-}" && -z "${RMUX:-}" && -t 0 && -t 1 ]] || return 1
+  (( ! ${+TMUX} && ! ${+RMUX} )) && [[ -t 0 && -t 1 ]] || return 1
   [[ "$OSTYPE" == darwin* && "${CC_GG_INLINE:-}" != 1 ]] || return 1
   (( $+functions[_tmux_store] )) || return 1
-  [[ -x "$HOME/.local/bin/tmux-store" ]] || (( $+commands[tmux-store] )) || return 1
+  local helper=${commands[tmux-store]:-}
+  [[ -x "$HOME/.local/bin/tmux-store" && -f "$HOME/.local/bin/tmux-store" ]] ||
+    [[ -n "$helper" && -x "$helper" && -f "$helper" ]] || return 1
   local runtime found=0
-  for runtime in $_mux_tmux_runtimes; do [[ -x "$runtime" ]] && found=1; done
+  for runtime in $_mux_tmux_runtimes; do [[ -x "$runtime" && -f "$runtime" ]] && found=1; done
   (( found )) && [[ "${commands[zsh]:-}" == /* ]]
 }
 

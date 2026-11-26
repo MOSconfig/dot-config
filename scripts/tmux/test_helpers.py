@@ -24,7 +24,8 @@ class Harness:
         self.bin.mkdir()
         self.capture = self.home / 'calls.jsonl'
         self.env = {k: v for k, v in os.environ.items()
-                    if k not in ('RMUX', 'RMUX_PANE', 'TMUX', 'TMUX_PANE', 'ZDOTDIR')}
+                    if k not in ('RMUX', 'RMUX_PANE', 'TMUX', 'TMUX_PANE', 'ZDOTDIR',
+                                 'CC_GG_INLINE', 'DISABLE_AUTO_TITLE')}
         self.env.update(HOME=str(self.home), PATH=f'{self.bin}:/usr/bin:/bin',
                         MUX_CAPTURE=str(self.capture))
         stub = f'''#!{sys.executable}
@@ -157,7 +158,7 @@ with open(os.environ['MUX_CAPTURE'], 'a') as stream:
 sys.exit(int(os.environ.get('STUB_STATUS', '0')))
 ''')
         self.status = self.home / 'status'
-        self.prelude = (f'_mux_tmux_runtimes=({shlex.quote(str(self.runtime))}); ')
+        self.prelude = (f'OSTYPE=darwin25.0; _mux_tmux_runtimes=({shlex.quote(str(self.runtime))}); ')
 
     def pty(self, code, send=(), timeout=10, **env):
         master, slave = os.openpty()
@@ -216,7 +217,16 @@ sys.exit(int(os.environ.get('STUB_STATUS', '0')))
             'inside tmux': ('', dict(TMUX='/tmp/native,1,0')),
             'inside rmux': ('', dict(RMUX='/tmp/rmux,1,0')),
             'linux': ('OSTYPE=linux-gnu; ', {}),
+            'empty tmux marker': ('', dict(TMUX='')),
+            'empty rmux marker': ('', dict(RMUX='')),
             'no tmux runtime': ('_mux_tmux_runtimes=(/nonexistent/tmux); ', {}),
+            'directory tmux runtime': (f'_mux_tmux_runtimes=({shlex.quote(str(self.home))}); ', {}),
+            'no store function': ('unfunction _tmux_store; ', {}),
+            'stale helper hash': (f'rm {shlex.quote(str(self.bin / "tmux-store"))}; '
+                                  f'hash tmux-store={shlex.quote(str(self.home))}; ', {}),
+            'relative zsh': ('hash zsh=zsh; ', {}),
+            'stdin redirected': ('exec </dev/null; ', {}),
+            'stdout redirected': (f'exec >{shlex.quote(str(self.home / "out"))}; ', {}),
         }
         for label, (extra, env) in cases.items():
             with self.subTest(label):
