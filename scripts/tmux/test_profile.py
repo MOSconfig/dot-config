@@ -361,8 +361,10 @@ class ProfileTests(unittest.TestCase):
                 expected += ',fill=' + re.search(r'bg=([^,]+)', roles[name]).group(1)
             self.assertEqual(tm.option(name), expected)
         cap = f'#[fg={left_bg},bg={bar},nobold]'
+        # qh doubles '#' after the 19-column cut, so the drawn label shows '#[' literally.
         for session, shown in [('profile', 'profile'), ('abcdefghijklmnopqrstuvwxyz', 'abcdefghijklmnopqrs'),
-                                ('界' * 12, '界' * 9)]:
+                                ('界' * 12, '界' * 9), ('AA#[bold]BB', 'AA##[bold]BB'),
+                                ('abcdefghijklmnopq#[x]yz', 'abcdefghijklmnopq##[')]:
             tm.command('rename-session', '-t', tm.format('#{session_id}', tm.pane), session)
             self.assertEqual(tm.format('#{E:status-left}', tm.pane), f'{cap}#[{left}] {shown} {cap} ')
         tm.command('rename-session', '-t', tm.format('#{session_id}', tm.pane), 'profile')

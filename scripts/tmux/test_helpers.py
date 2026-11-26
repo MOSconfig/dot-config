@@ -140,10 +140,11 @@ class HelperTests(Harness, unittest.TestCase):
             with self.subTest(launcher):
                 out = self.shell(f'source config/zsh/{launcher}.zsh; {launcher} {shlex.quote(title)}',
                                  TMUX='/tmp/native,123,0')
-                for code in ('2', '1'):
-                    self.assertIn(f'\x1b]{code};', out)
-                    body = out.split(f'\x1b]{code};', 1)[1].split('\x07', 1)[0]
-                    self.assertTrue(body.endswith(' ' + title), repr(body))
+                start = out.index('\x1b]2;')
+                icon_title = out[start + 4:out.index('\x07', start)]
+                self.assertTrue(icon_title.endswith(' ' + title), repr(icon_title))
+                self.assertEqual(out[start:start + 2 * len(icon_title) + 10],
+                                 f'\x1b]2;{icon_title}\x07\x1b]1;{icon_title}\x07')
 
     def test_titles_keep_rmux_route_when_both_markers_present(self):
         self.shell('source config/zsh/cc.zsh; cc title', RMUX='rmux-socket', TMUX='compat-socket')
