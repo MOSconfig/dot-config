@@ -190,7 +190,7 @@ ts            # 保存此 socket 的全部会话，确认后重启并恢复
 
 ## 标题
 
-`cc [标题]` 和 `gg [标题]` 会向 SonicTerm 发送 OSC 1 和 OSC 2 标题。它们先检查 RMUX 并直接重命名其窗口；在原生 tmux 中，通过 `tmux-store` 重命名当前 socket 的当前窗口。没有标题时使用当前路径。
+`cc [标题]` 和 `gg [标题]` 会把 OSC 1 和 OSC 2 标题按原样输出到所在终端。在多路复用器外就是 SonicTerm；在 tmux 中，外层标题由 tmux 根据 `set-titles-string` 自行生成。它们先检查 RMUX 并直接重命名其窗口；在原生 tmux 中，通过 `tmux-store` 重命名当前 socket 的当前窗口。没有标题时使用当前路径。
 
 在 macOS 上，如果当前不在 tmux 或 RMUX 中（两个变量都未设置），`cc` 和 `gg` 会在多路复用器中打开，让 [mux-agents](Claude-Code-zh-CN.md) 有窗格可用：优先原生 tmux，其次 RMUX。它们运行 `tmux-store open`；原生 tmux 或其助手不可用、但已安装 `rmux`、`rmux-daemon` 和 RMUX 助手时，运行 `rmux-store open`：会话以当前文件夹命名（`.`、`:` 和开头的 `-` 变成 `_`，`/` 变成 `root`）；会话已存在时新增一个窗口。窗口从当前文件夹启动，在其中运行 `cc` 或 `gg`，代理退出后保留 shell。`cc`/`gg` 返回连接（attach）的状态，不会再在当前 shell 里启动一次。以下情况仍像以前一样直接运行：stdin 或 stdout 不是终端、Linux 或 Windows、两种多路复用器及其助手都不可用、或设置了 `CC_GG_INLINE=1`。`open` 失败时，错误信息会提示这个开关。安装程序在 macOS 上仍不安装 RMUX。Linux 以及 Windows 上的 RMUX 见 [#169](https://github.com/MOSconfig/dot-config/issues/169)。
 

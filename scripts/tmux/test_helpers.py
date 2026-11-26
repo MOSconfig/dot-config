@@ -134,6 +134,18 @@ class HelperTests(Harness, unittest.TestCase):
         self.assertEqual(calls[3][1], ['--yolo', '--model', 'gpt-6-astra',
                                      '--context', 'long_context', '--effort', 'xhigh'])
 
+    def test_osc_titles_are_sent_literally(self):
+        title = 'a %n %F{red} b\\n c'
+        for launcher in ('cc', 'gg'):
+            with self.subTest(launcher):
+                out = self.shell(f'source config/zsh/{launcher}.zsh; {launcher} {shlex.quote(title)}',
+                                 TMUX='/tmp/native,123,0')
+                start = out.index('\x1b]2;')
+                icon_title = out[start + 4:out.index('\x07', start)]
+                self.assertTrue(icon_title.endswith(' ' + title), repr(icon_title))
+                self.assertEqual(out[start:start + 2 * len(icon_title) + 10],
+                                 f'\x1b]2;{icon_title}\x07\x1b]1;{icon_title}\x07')
+
     def test_titles_keep_rmux_route_when_both_markers_present(self):
         self.shell('source config/zsh/cc.zsh; cc title', RMUX='rmux-socket', TMUX='compat-socket')
         self.assertEqual([call[0] for call in self.calls()], ['rmux', 'claude'])

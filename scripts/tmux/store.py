@@ -105,8 +105,9 @@ def decode_rows(output, schema):
 
 
 def literal(value):
+    # tmux halves a '#' run but copies one that ends at '[' verbatim (format.c, format_expand1).
     text(value)
-    value = value.replace('#', '##')
+    value = re.sub(r'#+', lambda m: m.group(0) if value[m.end():m.end() + 1] == '[' else m.group(0) * 2, value)
     return value[:-1] + '\\;' if value.endswith(';') else value
 
 
@@ -117,10 +118,7 @@ def argv_literal(value):
 
 
 def validate_open(args):
-    request = shared_validate_open(args)
-    # tmux 3.8 keeps '#[' as a style marker even when '#' is doubled, so -c/-s/-n would change.
-    require('#[' not in request[0] and '#[' not in request[2], 'open DIR and NAME cannot contain #[')
-    return request
+    return shared_validate_open(args)
 
 
 def saved_name(value):
