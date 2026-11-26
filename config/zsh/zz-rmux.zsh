@@ -13,11 +13,19 @@ function _mux_uses_rmux {
   return 1
 }
 
+# Print the helper _rmux_store runs: the first executable regular file.
+function _rmux_store_path {
+  local helper
+  for helper in "$HOME/.local/bin/rmux-store" "${commands[rmux-store]:-}"; do
+    [[ -n "$helper" && -f "$helper" && -x "$helper" ]] && { print -r -- "$helper"; return 0; }
+  done
+  return 1
+}
+
 function _rmux_store {
-  if [[ -x "$HOME/.local/bin/rmux-store" ]]; then
-    "$HOME/.local/bin/rmux-store" "$@"
-  elif (( $+commands[rmux-store] )); then
-    command rmux-store "$@"
+  local helper
+  if helper=$(_rmux_store_path); then
+    "$helper" "$@"
   else
     print -u2 'RMUX helpers are not installed; run ./install.sh in dot-configs.'
     return 127

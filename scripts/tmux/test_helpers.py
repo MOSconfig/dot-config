@@ -154,13 +154,21 @@ class LaunchTests(Harness, unittest.TestCase):
         store.write_text(f'''#!{sys.executable}
 import json, os, sys
 with open(os.environ['MUX_CAPTURE'], 'a') as stream:
-    stream.write(json.dumps(['tmux-store', sys.argv[1:], os.isatty(0), os.isatty(1)]) + '\\n')
+    stream.write(json.dumps([os.path.basename(sys.argv[0]), sys.argv[1:], os.isatty(0), os.isatty(1)]) + '\\n')
 sys.exit(int(os.environ.get('STUB_STATUS', '0')))
 ''')
         self.zsh = self.bin / 'zsh'
         self.zsh.symlink_to('/bin/zsh')
         self.status = self.home / 'status'
-        self.prelude = (f'OSTYPE=darwin25.0; _mux_tmux_runtimes=({shlex.quote(str(self.runtime))}); ')
+        (self.bin / 'rmux-store').write_text(store.read_text())
+        (self.bin / 'rmux-store').chmod(0o755)
+        (self.bin / 'rmux-daemon').write_text('#!/bin/sh\n')
+        (self.bin / 'rmux-daemon').chmod(0o755)
+        self.rmux = self.bin / 'rmux'
+        self.prelude = (f'OSTYPE=darwin25.0; _mux_tmux_runtimes=({shlex.quote(str(self.runtime))}); '
+                        '_mux_rmux_runtimes=(/nonexistent/rmux); ')
+        self.no_tmux_rmux = (f'_mux_tmux_runtimes=(/nonexistent/tmux); '
+                             f'_mux_rmux_runtimes=({shlex.quote(str(self.rmux))}); ')
 
     def pty(self, code, send=(), timeout=10, **env):
         master, slave = os.openpty()
@@ -224,6 +232,8 @@ sys.exit(int(os.environ.get('STUB_STATUS', '0')))
             'no tmux runtime': ('_mux_tmux_runtimes=(/nonexistent/tmux); ', {}),
             'directory tmux runtime': (f'_mux_tmux_runtimes=({shlex.quote(str(self.home))}); ', {}),
             'no store function': ('unfunction _tmux_store; ', {}),
+            'no tmux path resolver': ('unfunction _tmux_store_path; '
+                                      'command_not_found_handler() { return 0; }; ', {}),
             'stale helper hash': (f'rm {shlex.quote(str(self.bin / "tmux-store"))}; '
                                   f'hash tmux-store={shlex.quote(str(self.home))}; ', {}),
             'first runtime not executable': (
@@ -246,6 +256,78 @@ sys.exit(int(os.environ.get('STUB_STATUS', '0')))
                 self.assertEqual(self.status.read_text().split(), ['0'])
                 self.assertIn('claude', [call[0] for call in self.calls()])
                 self.assertNotIn(['open'], [call[1][:1] for call in self.calls() if call[0] == 'tmux-store'])
+
+    def test_rmux_is_the_fallback_when_native_tmux_is_missing(self):
+        for launcher in ('cc', 'gg'):
+            for status in (0, 1):
+                with self.subTest(launcher=launcher, status=status):
+                    self.capture.unlink(missing_ok=True)
+                    self.assertEqual(self.wrapped(launcher, status, extra=self.no_tmux_rmux), [str(status), 'unset'])
+                    calls = self.calls()
+                    self.assertEqual([call[0] for call in calls], ['rmux-store'], calls)
+                    args = calls[0][1]
+                    self.assertTrue(calls[0][2] and calls[0][3])
+                    self.assertEqual(args[:2], ['open', str(ROOT)])
+                    self.assertEqual(args[3:5], [str(self.zsh), '-lic'])
+                    self.assertEqual(args[6:], [str(self.zsh), launcher, 'two words', '#{x} end;'])
+
+    def test_open_never_falls_back_to_a_backend_the_guard_did_not_pick(self):
+        code = (SOURCE + LAUNCHERS + self.prelude + '_mux_backend() { return 1; }; '
+                f'_mux_open cc t; print -r -- $? > {shlex.quote(str(self.status))}')
+        output = self.pty(code)
+        self.assertEqual(self.status.read_text().split(), ['1'])
+        self.assertIn('CC_GG_INLINE=1', output)
+        self.assertEqual(self.calls(), [])
+
+    def test_native_tmux_wins_when_both_are_available(self):
+        both = f'_mux_rmux_runtimes=({shlex.quote(str(self.rmux))}); '
+        self.wrapped('cc', 0, extra=both)
+        self.assertEqual([call[0] for call in self.calls()], ['tmux-store'])
+
+    def test_rmux_fallback_guards_keep_the_inline_launch(self):
+        stub = (self.bin / 'rmux-store').read_text()
+        cases = {
+            'no rmux daemon': f'rm {shlex.quote(str(self.bin / "rmux-daemon"))}; ',
+            'no rmux-store helper': f'rm {shlex.quote(str(self.bin / "rmux-store"))}; hash -r; ',
+            'first rmux not executable': (f'_mux_rmux_runtimes=({shlex.quote(str(self.home / "plain"))} '
+                                          f'{shlex.quote(str(self.rmux))}); '),
+            'no rmux store function': 'unfunction _rmux_store; ',
+            'no rmux path resolver': ('unfunction _rmux_store_path; '
+                                      'command_not_found_handler() { return 0; }; '),
+        }
+        (self.home / 'plain').write_text('not executable\n')
+        for label, extra in cases.items():
+            with self.subTest(label):
+                self.capture.unlink(missing_ok=True)
+                for name, text in (('rmux-store', stub), ('rmux-daemon', '#!/bin/sh\n')):
+                    (self.bin / name).write_text(text)
+                    (self.bin / name).chmod(0o755)
+                code = (SOURCE + LAUNCHERS + self.prelude + self.no_tmux_rmux + extra +
+                        f'cc t; print -r -- $? > {shlex.quote(str(self.status))}')
+                self.pty(code)
+                self.assertEqual(self.status.read_text().split(), ['0'])
+                self.assertEqual([call[0] for call in self.calls()], ['claude'])
+
+    def test_rmux_window_runs_the_launcher_once_in_pane_then_keeps_a_shell(self):
+        self.wrapped('cc', extra=self.no_tmux_rmux)
+        args = self.calls()[0][1]
+        self.capture.unlink()
+        zdot = self.home / 'zdot'
+        zdot.mkdir(exist_ok=True)
+        rc = ''.join(f'source {ROOT}/config/zsh/{name}\n' for name in ('cc.zsh', 'gg.zsh', 'zz-rmux.zsh', 'zz-tmux.zsh'))
+        (zdot / '.zshrc').write_text(f'PROMPT="READY> "; export PATH={shlex.quote(str(self.bin))}:$PATH\n' + rc)
+        inner = ' '.join(shlex.quote(arg) for arg in args[3:])
+        output = self.pty(f'cd {shlex.quote(str(ROOT))} && exec {inner}',
+                          send=[('READY> ', 'print -r -- $((17*19))\n'), ('323', 'builtin exit\n')],
+                          ZDOTDIR=str(zdot), RMUX='/tmp/rmux,1,0', RMUX_PANE='%1', TMUX='/tmp/rmux,1,0')
+        calls = self.calls()
+        self.assertEqual([call[0] for call in calls if call[0] in ('claude', 'copilot')], ['claude'], calls)
+        renames = [call[1] for call in calls if call[0] == 'rmux']
+        self.assertEqual(len(renames), 1, calls)
+        self.assertEqual(renames[0][:2], ['rename-window', '--'])
+        self.assertTrue(renames[0][2].endswith(' two words #{x} end\;'), renames)
+        self.assertNotIn('open', [c[1][0] for c in calls if c[0] in ('tmux-store', 'rmux-store')])
+        self.assertRegex(output, r'(?m)^323\r?$')
 
     def test_directory_helper_is_skipped_by_guard_and_dispatch_alike(self):
         (self.home / '.local' / 'bin' / 'tmux-store').mkdir(parents=True)

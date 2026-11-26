@@ -1,7 +1,7 @@
 # gg [title]
 #
-# On macOS outside tmux/RMUX with a terminal, opens a native tmux window in
-# $PWD instead (see _mux_should_wrap in zz-tmux.zsh); CC_GG_INLINE=1 opts out.
+# On macOS outside tmux/RMUX with a terminal, opens a window in $PWD in native
+# tmux, else RMUX (see _mux_backend in zz-tmux.zsh); CC_GG_INLINE=1 opts out.
 #
 # Set the current terminal tab + window title to [title], then launch
 # `copilot` in the current shell. If title is omitted, use the current
@@ -33,7 +33,10 @@ function gg {
   print -Pn "\e]2;${title}\a"
   print -Pn "\e]1;${title}\a"
   if [[ -n "$RMUX" ]] && (( $+commands[rmux] )); then
-    command rmux rename-window -- "$title" 2>/dev/null
+    # RMUX reads a trailing ';' as a command separator; escape it.
+    local rmux_title=$title
+    [[ $rmux_title == *';' ]] && rmux_title="${rmux_title%;}\\;"
+    command rmux rename-window -- "$rmux_title" 2>/dev/null
   elif [[ -z "${RMUX:-}" && -n "${TMUX:-}" ]] && (( $+functions[_tmux_store] )); then
     _tmux_store rename "$title" 2>/dev/null
   fi

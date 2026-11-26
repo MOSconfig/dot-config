@@ -20,30 +20,58 @@ function _tmux_store {
   fi
 }
 
-# cc/gg outside a multiplexer: open in a native tmux window (macOS only).
+# cc/gg outside a multiplexer (macOS only): open in native tmux, else RMUX.
 typeset -ga _mux_tmux_runtimes=(/opt/homebrew/bin/tmux /usr/local/bin/tmux)
+typeset -ga _mux_rmux_runtimes=(/opt/homebrew/bin/rmux /usr/local/bin/rmux)
 
-function _mux_should_wrap {
-  emulate -L zsh
-  (( ! ${+TMUX} && ! ${+RMUX} )) && [[ -t 0 && -t 1 ]] || return 1
-  [[ "$OSTYPE" == darwin* && "${CC_GG_INLINE:-}" != 1 ]] || return 1
-  (( $+functions[_tmux_store] )) && _tmux_store_path >/dev/null || return 1
-  # Same choice as store.py: the first runtime path that is a file must be executable.
+# Same choice as each store: the first runtime path that is a file must be executable.
+function _mux_runtime_ok {
   local runtime
-  for runtime in $_mux_tmux_runtimes; do
+  for runtime in "$@"; do
     [[ -f "$runtime" ]] || continue
-    [[ -x "$runtime" && "${commands[zsh]:-}" == /* ]]
+    [[ -x "$runtime" ]]
     return
   done
   return 1
 }
 
+# Print the backend cc/gg open in: tmux first, then RMUX.
+function _mux_backend {
+  emulate -L zsh
+  if (( $+functions[_tmux_store] && $+functions[_tmux_store_path] )) && _tmux_store_path >/dev/null &&
+      _mux_runtime_ok $_mux_tmux_runtimes; then
+    print tmux
+    return 0
+  fi
+  local runtime
+  for runtime in $_mux_rmux_runtimes; do [[ -f "$runtime" ]] && break; runtime=; done
+  if (( $+functions[_rmux_store] && $+functions[_rmux_store_path] )) && _rmux_store_path >/dev/null &&
+      _mux_runtime_ok $_mux_rmux_runtimes &&
+      [[ -f "${runtime:h}/rmux-daemon" && -x "${runtime:h}/rmux-daemon" ]]; then
+    print rmux
+    return 0
+  fi
+  return 1
+}
+
+function _mux_should_wrap {
+  emulate -L zsh
+  (( ! ${+TMUX} && ! ${+RMUX} )) && [[ -t 0 && -t 1 ]] || return 1
+  [[ "$OSTYPE" == darwin* && "${CC_GG_INLINE:-}" != 1 ]] || return 1
+  [[ "${commands[zsh]:-}" == /* ]] && _mux_backend >/dev/null
+}
+
 function _mux_open {
   emulate -L zsh
-  local launcher=$1 title=$2 zsh=${commands[zsh]}
+  local launcher=$1 title=$2 zsh=${commands[zsh]} backend
   shift 2
+  if ! backend=$(_mux_backend); then
+    print -u2 -- "$launcher: no tmux or RMUX available; set CC_GG_INLINE=1 to run without one."
+    return 1
+  fi
+  local store=_${backend}_store
   # The window's zsh runs the launcher function in-pane, then stays as a shell.
-  _tmux_store open "$PWD" "$title" "$zsh" -lic \
+  $store open "$PWD" "$title" "$zsh" -lic \
     'if (( $+functions[$1] )); then "$@"; else print -u2 -- "$1: launcher function not loaded"; fi; exec "$0" -il' \
     "$zsh" "$launcher" "$@"
 }

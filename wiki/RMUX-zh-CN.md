@@ -161,7 +161,7 @@ set -s set-clipboard on
 
 ## Claude Code teammate mode
 
-普通 Claude Code 会话继续使用 `claude` 或仓库提供的 `cc`。在 macOS 上，多路复用器外的 `cc` 会在原生 tmux 而不是 RMUX 中打开，见 [SonicTerm 与 Shell](SonicTerm-and-Shell-zh-CN.md)。需要让 Claude Code 通过窗格启动 agent team 时，再显式使用 RMUX：
+普通 Claude Code 会话继续使用 `claude` 或仓库提供的 `cc`。在 macOS 上，多路复用器外的 `cc` 会在原生 tmux 中打开；原生 tmux 或其助手不可用、且已安装 `rmux`、`rmux-daemon` 和 RMUX 助手时用 RMUX。此时 `rmux-store open DIR NAME PROGRAM ARG...` 会创建或复用以文件夹命名的会话，新增一个窗口，新服务器会等待 PPID 1，然后连接到这个窗口。参数和窗口名按原样传递，末尾的 `;` 会被转义。文件夹包含 `#` 或 `\`、或标题包含 `\` 时会被拒绝，因为 RMUX 0.10 会在 `-c`、`-s` 和重命名中改变它们。文件夹名包含不可见字符（例如 U+200D）时也会被拒绝，因为 RMUX 会以转义形式报告它们，无法复用会话；中文和带重音的名称可以正常使用。见 [SonicTerm 与 Shell](SonicTerm-and-Shell-zh-CN.md)。需要让 Claude Code 通过窗格启动 agent team 时，再显式使用 RMUX：
 
 ```sh
 rmux claude --permission-mode bypassPermissions \

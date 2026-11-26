@@ -156,7 +156,7 @@ source ~/.oh-my-zsh/custom/cc.zsh
 
 `settings.json` 是符号链接，因此 CLI 持久化的偏好可能表现为源文件改动。提交前检查 `git diff -- config/claude/settings.json`，只按上面的受支持设置核对变动的键，再运行 `scripts/check.sh all`。不要整份恢复文件，以免丢失其他有意保留的修改。
 
-`cc [标题]` 会设置 SonicTerm 标题，并用相同默认值启动 Claude Code。它先检查 RMUX 并直接重命名其窗口。在原生 tmux 中，通过 `tmux-store` 重命名当前 socket 的当前窗口，不添加 `PATH` shim，也不替换真正的全局 `tmux` 可执行文件。请看 [Tmux](Tmux-zh-CN.md)。在 macOS 上，如果不在 tmux 和 RMUX 中，`cc` 会先在当前文件夹打开一个原生 tmux 窗口，让 mux-agents 可用；`CC_GG_INLINE=1` 保留直接运行方式。见 [SonicTerm 与 Shell](SonicTerm-and-Shell-zh-CN.md)。
+`cc [标题]` 会设置 SonicTerm 标题，并用相同默认值启动 Claude Code。它先检查 RMUX 并直接重命名其窗口。在原生 tmux 中，通过 `tmux-store` 重命名当前 socket 的当前窗口，不添加 `PATH` shim，也不替换真正的全局 `tmux` 可执行文件。请看 [Tmux](Tmux-zh-CN.md)。在 macOS 上，如果不在 tmux 和 RMUX 中，`cc` 会先在当前文件夹打开一个原生 tmux 窗口（原生 tmux 不可用时用 RMUX），让 mux-agents 可用；`CC_GG_INLINE=1` 保留直接运行方式。见 [SonicTerm 与 Shell](SonicTerm-and-Shell-zh-CN.md)。
 
 只有当 Claude Code 需要创建 agent-team 窗格时才使用 `rmux claude`。RMUX 会给这个进程一个私有 tmux 兼容 shim。不会安装全局 tmux shim。
 

@@ -6,6 +6,7 @@ import json
 import os
 import re
 import stat
+import sys
 import tempfile
 
 
@@ -31,6 +32,30 @@ def text(value, name=False):
                 'session name cannot start with - or contain . or :')
     return value
 
+
+
+def session_slug(directory):
+    name = re.sub(r'[.:]', '_', os.path.basename(directory.rstrip('/'))) or 'root'
+    return '_' + name[1:] if name.startswith('-') else name
+
+
+def validate_open(args):
+    """Checks shared by tmux-store and rmux-store `open DIR NAME PROGRAM ARG...`, before any store work."""
+    require(len(args) >= 4, 'open requires DIR NAME PROGRAM ARG...')
+    directory, name, argv = args[0], args[1], list(args[2:])
+    require(os.isatty(0) and os.isatty(1), 'open needs a terminal on stdin and stdout')
+    require('RMUX' not in os.environ, 'cannot open from inside RMUX; detach first')
+    require(sys.platform == 'darwin', 'open supports macOS only')
+    text(directory)
+    require(os.path.isabs(directory) and os.path.isdir(directory) and os.access(directory, os.X_OK),
+            'open DIR must be an absolute, searchable directory')
+    session = text(session_slug(directory), name=True)
+    text(name)
+    for item in argv:
+        text(item)
+    require(os.path.isabs(argv[0]) and os.path.isfile(argv[0]) and os.access(argv[0], os.X_OK),
+            'open PROGRAM must be an absolute executable file')
+    return directory, session, name, argv
 
 def flag(value):
     require(type(value) is bool, 'invalid active flag')

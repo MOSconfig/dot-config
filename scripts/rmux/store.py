@@ -19,7 +19,23 @@ import uuid
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'mux'))
 from workspace import (PrivateState, StoreError, digest, flag, identifier, integer,
                        make_snapshot, parse_layout, require, structural, text,
-                       validate_snapshot)
+                       validate_open, validate_snapshot)
+
+
+def rmux_arg(value):
+    # RMUX 0.10 keeps -n and argv literal ('#' included); only a trailing ';' splits commands.
+    text(value)
+    return value[:-1] + '\\;' if value.endswith(';') else value
+
+
+def validate_rmux_open(args):
+    request = validate_open(args)
+    # RMUX 0.10 (probed): -c expands '##'/'#{' but breaks if '#[' is doubled; -s and rename double '\'.
+    require('#' not in request[0] and '\\' not in request[0], 'RMUX open DIR cannot contain # or \\')
+    require('\\' not in request[2], 'RMUX open NAME cannot contain \\')
+    # RMUX reports non-printable name characters (e.g. U+200D) octal-escaped, so reuse would miss.
+    require(request[1].isprintable(), 'RMUX open session name must be printable')
+    return request
 
 
 class Store(PrivateState):
@@ -203,13 +219,17 @@ class Store(PrivateState):
         if window_name:
             args += ['-n', window_name]
         output = self.command(runtime, args, no_start=False)
+        self.wait_ppid1(runtime)
+        return output
+
+    def wait_ppid1(self, runtime):
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:
             server = self.probe(runtime)
             if server:
                 self.verify_process(runtime, server)
                 if self.process_info(server['pid'])['ppid'] == 1:
-                    return output
+                    return
             time.sleep(0.05)
         raise StoreError('new daemon did not become PPID 1; refusing attach')
 
@@ -232,6 +252,33 @@ class Store(PrivateState):
         argv = self.argv(runtime, [command, '-t', sid])
         env = dict(os.environ) if command == 'switch-client' else self.environment()
         os.execve(argv[0], argv, env)
+
+    def open(self, directory, session, name, argv):
+        command = [rmux_arg(item) for item in argv]
+        place = ['-c', rmux_arg(directory), '-n', rmux_arg(name)]
+        with self.lock():
+            active = self.ensure_active()
+            runtime = active['runtime']
+            sid = self.session_id(runtime, session) if active['server'] else None
+            if sid is not None:
+                target = self.command(runtime, ['new-window', '-d', '-P', '-F', '#{session_id}:#{window_id}',
+                                                '-t', sid + ':'] + place + command)
+            else:
+                args = ['new-session', '-d', '-P', '-F', '#{session_id}|#{window_id}|#{pane_id}',
+                        '-s', rmux_arg(session), '-x', '80', '-y', '24'] + place + command
+                if active['server'] is None:
+                    output = self.command(runtime, args, no_start=False)
+                    self.wait_ppid1(runtime)
+                    self.record_active(runtime)
+                else:
+                    output = self.command(runtime, args)
+                parts = output.split('|')
+                require(len(parts) == 3, 'created window was not reported')
+                target = parts[0] + ':' + parts[1]
+            sid, _, wid = target.partition(':')
+            target = identifier(sid, '$') + ':' + identifier(wid, '@')
+        argv = self.argv(runtime, ['attach-session', '-t', target])
+        os.execve(argv[0], argv, self.environment())
 
     def rl(self):
         with self.lock():
@@ -480,6 +527,8 @@ HELP = '''RMUX helpers
   rd NAME       Permanently stop the exact named session and its programs.
   rs            Save and restart ALL sessions using the installed runtime.
   rh            Show helper usage, parent PID, and upgrade steps.
+  cc / gg       macOS fallback when native tmux is unavailable: open in a folder-named
+                session window (rmux-store open DIR NAME PROGRAM ARG...). CC_GG_INLINE=1 opts out.
 
 Upgrade: brew upgrade rmux
 When ready to stop running programs: rs
@@ -506,11 +555,23 @@ def main(args=None):
     args = sys.argv[1:] if args is None else args
     command = args[0] if args else 'help'
     arity = {'rr': 2, 'rl': 1, 'rd': 2, 'prepare': 1, 'restart': 1, 'help': 1}
+    if command == 'open':
+        hint = 'Set CC_GG_INLINE=1 to run cc/gg without a multiplexer.'
+        if len(args) < 5:
+            print('Usage: rmux-store open DIR NAME PROGRAM ARG...\n' + hint, file=sys.stderr)
+            return 2
+        try:
+            request = validate_rmux_open(args[1:])
+            Store().open(*request)
+            return 0
+        except (StoreError, OSError, subprocess.SubprocessError, UnicodeError, EOFError, KeyboardInterrupt) as exc:
+            print(f'rmux-store: {exc}\n{hint}', file=sys.stderr)
+            return 1
     if command == 'help' and len(args) <= 1:
         print(HELP)
         return 0
     if command not in arity and command not in ('client', '_worker') or command in arity and len(args) != arity[command]:
-        print('Usage: rmux-store {rr NAME|rl|rd NAME|client ARGS...|prepare|restart|help}', file=sys.stderr)
+        print('Usage: rmux-store {rr NAME|rl|rd NAME|open DIR NAME PROGRAM ARG...|client ARGS...|prepare|restart|help}', file=sys.stderr)
         return 2
     try:
         if command == '_worker':
