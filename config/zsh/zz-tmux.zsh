@@ -63,9 +63,13 @@ function _mux_should_wrap {
 
 function _mux_open {
   emulate -L zsh
-  local launcher=$1 title=$2 zsh=${commands[zsh]} store=_tmux_store
+  local launcher=$1 title=$2 zsh=${commands[zsh]} backend
   shift 2
-  [[ "$(_mux_backend)" == rmux ]] && store=_rmux_store
+  if ! backend=$(_mux_backend); then
+    print -u2 -- "$launcher: no tmux or RMUX available; set CC_GG_INLINE=1 to run without one."
+    return 1
+  fi
+  local store=_${backend}_store
   # The window's zsh runs the launcher function in-pane, then stays as a shell.
   $store open "$PWD" "$title" "$zsh" -lic \
     'if (( $+functions[$1] )); then "$@"; else print -u2 -- "$1: launcher function not loaded"; fi; exec "$0" -il' \

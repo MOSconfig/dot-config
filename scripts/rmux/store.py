@@ -23,14 +23,17 @@ from workspace import (PrivateState, StoreError, digest, flag, identifier, integ
 
 
 def rmux_arg(value):
-    # RMUX 0.10 keeps -n/-s/argv literal ('#' included); only a trailing ';' splits commands.
+    # RMUX 0.10 keeps -n and argv literal ('#' included); only a trailing ';' splits commands.
     text(value)
     return value[:-1] + '\\;' if value.endswith(';') else value
 
 
-def rmux_dir(value):
-    # RMUX 0.10 format-expands -c: '##' and '#{' change the path unless '#' is doubled.
-    return rmux_arg(value.replace('#', '##'))
+def validate_rmux_open(args):
+    request = validate_open(args)
+    # RMUX 0.10 (probed): -c expands '##'/'#{' but breaks if '#[' is doubled; -s and rename double '\'.
+    require('#' not in request[0] and '\\' not in request[0], 'RMUX open DIR cannot contain # or \\')
+    require('\\' not in request[2], 'RMUX open NAME cannot contain \\')
+    return request
 
 
 class Store(PrivateState):
@@ -250,7 +253,7 @@ class Store(PrivateState):
 
     def open(self, directory, session, name, argv):
         command = [rmux_arg(item) for item in argv]
-        place = ['-c', rmux_dir(directory), '-n', rmux_arg(name)]
+        place = ['-c', rmux_arg(directory), '-n', rmux_arg(name)]
         with self.lock():
             active = self.ensure_active()
             runtime = active['runtime']
@@ -522,7 +525,7 @@ HELP = '''RMUX helpers
   rd NAME       Permanently stop the exact named session and its programs.
   rs            Save and restart ALL sessions using the installed runtime.
   rh            Show helper usage, parent PID, and upgrade steps.
-  cc / gg       macOS fallback when Homebrew tmux is missing: open in a folder-named
+  cc / gg       macOS fallback when native tmux is unavailable: open in a folder-named
                 session window (rmux-store open DIR NAME PROGRAM ARG...). CC_GG_INLINE=1 opts out.
 
 Upgrade: brew upgrade rmux
@@ -556,7 +559,7 @@ def main(args=None):
             print('Usage: rmux-store open DIR NAME PROGRAM ARG...\n' + hint, file=sys.stderr)
             return 2
         try:
-            request = validate_open(args[1:])
+            request = validate_rmux_open(args[1:])
             Store().open(*request)
             return 0
         except (StoreError, OSError, subprocess.SubprocessError, UnicodeError, EOFError, KeyboardInterrupt) as exc:

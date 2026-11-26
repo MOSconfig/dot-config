@@ -250,13 +250,17 @@ class OpenTests(unittest.TestCase):
         self.active = {'version': 1, 'runtime': self.runtime, 'server': {'pid': 42, 'start': 's', 'socket': '/x'}}
 
     def request(self, directory=None, name='✨ title', argv=None):
-        return store.validate_open([str(directory or self.project), name] + (self.argv if argv is None else argv))
+        return store.validate_rmux_open([str(directory or self.project), name] + (self.argv if argv is None else argv))
 
     def test_validate_shares_the_native_rules_but_allows_style_markers(self):
-        styled = self.home / 'folder#[fg=red]'
-        styled.mkdir()
-        self.assertEqual(self.request(styled, 'fix #[bold]')[:3], (str(styled), 'folder#[fg=red]', 'fix #[bold]'))
-        for label, kwargs in {'relative dir': dict(directory='relative'),
+        self.assertEqual(self.request(name='fix #[bold] #{x}')[2], 'fix #[bold] #{x}')
+        hashed, slashed = self.home / 'p#[bold]', self.home / 'a\\b'
+        hashed.mkdir()
+        slashed.mkdir()
+        for label, kwargs in {'hash dir': dict(directory=hashed),
+                              'backslash dir': dict(directory=slashed),
+                              'backslash name': dict(name='a\\b'),
+                              'relative dir': dict(directory='relative'),
                               'file program': dict(argv=[str(self.project / 'nope'), '-c']),
                               'single operand': dict(argv=[str(self.shell)]),
                               'control name': dict(name='a\nb')}.items():
@@ -270,12 +274,11 @@ class OpenTests(unittest.TestCase):
                 with self.assertRaises(store.StoreError): self.request()
 
     def test_escapes_match_rmux_parsing(self):
-        self.assertEqual(store.rmux_dir('/w/a#{x}##b'), '/w/a##{x}####b')
         self.assertEqual(store.rmux_arg('n #{x} #[y];'), 'n #{x} #[y]\;')
         with self.assertRaises(store.StoreError): store.rmux_arg('bad\nline')
 
     def test_cold_open_bootstraps_records_and_attaches_exact_window(self):
-        project = self.home / 'p#{x}'
+        project = self.home / 'p x;'
         project.mkdir()
         with patch.object(self.store, 'ensure_active', return_value=dict(self.active, server=None)), \
              patch.object(self.store, 'command', return_value='$3|@7|%9') as command, \
@@ -285,8 +288,8 @@ class OpenTests(unittest.TestCase):
             self.store.open(*self.request(project, 'w;'))
             args = command.call_args.args[1]
             self.assertEqual(args[:1], ['new-session'])
-            self.assertEqual(args[args.index('-s') + 1], 'p#{x}')
-            self.assertEqual(args[args.index('-c') + 1], str(self.home / 'p##{x}'))
+            self.assertEqual(args[args.index('-s') + 1], 'p x\;')
+            self.assertEqual(args[args.index('-c') + 1], str(self.home / 'p x\;'))
             self.assertEqual(args[args.index('-n') + 1], 'w\;')
             self.assertEqual(args[-len(self.argv):], self.argv[:-1] + ['x #{y}\;'])
             self.assertFalse(command.call_args.kwargs.get('no_start', True))

@@ -269,6 +269,14 @@ sys.exit(int(os.environ.get('STUB_STATUS', '0')))
                     self.assertEqual(args[3:5], [str(self.zsh), '-lic'])
                     self.assertEqual(args[6:], [str(self.zsh), launcher, 'two words', '#{x} end;'])
 
+    def test_open_never_falls_back_to_a_backend_the_guard_did_not_pick(self):
+        code = (SOURCE + LAUNCHERS + self.prelude + '_mux_backend() { return 1; }; '
+                f'_mux_open cc t; print -r -- $? > {shlex.quote(str(self.status))}')
+        output = self.pty(code)
+        self.assertEqual(self.status.read_text().split(), ['1'])
+        self.assertIn('CC_GG_INLINE=1', output)
+        self.assertEqual(self.calls(), [])
+
     def test_native_tmux_wins_when_both_are_available(self):
         both = f'_mux_rmux_runtimes=({shlex.quote(str(self.rmux))}); '
         self.wrapped('cc', 0, extra=both)
@@ -310,7 +318,10 @@ sys.exit(int(os.environ.get('STUB_STATUS', '0')))
                           ZDOTDIR=str(zdot), RMUX='/tmp/rmux,1,0', RMUX_PANE='%1', TMUX='/tmp/rmux,1,0')
         calls = self.calls()
         self.assertEqual([call[0] for call in calls if call[0] in ('claude', 'copilot')], ['claude'], calls)
-        self.assertEqual([call[1][0] for call in calls if call[0] == 'rmux'], ['rename-window'])
+        renames = [call[1] for call in calls if call[0] == 'rmux']
+        self.assertEqual(len(renames), 1, calls)
+        self.assertEqual(renames[0][:2], ['rename-window', '--'])
+        self.assertTrue(renames[0][2].endswith(' two words #{x} end\;'), renames)
         self.assertNotIn('open', [c[1][0] for c in calls if c[0] in ('tmux-store', 'rmux-store')])
         self.assertRegex(output, r'(?m)^323\r?$')
 

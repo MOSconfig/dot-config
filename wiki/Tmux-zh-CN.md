@@ -45,7 +45,7 @@ ts            # 确认、保存、重启并恢复当前服务器的工作区
 
 见 [tmux 按键表](Tmux-Keymap-zh-CN.md)。`cc` 和 `gg` 通过原生助手重命名当前 tmux 窗口；它们的 RMUX 行为和启动默认值保持独立。
 
-在 macOS 上，在 tmux 和 RMUX 外启动的 `cc` 和 `gg` 会调用 `tmux-store open DIR NAME PROGRAM ARG...`。它先检查终端、文件夹和程序，再获取锁；然后创建或复用以文件夹命名的会话，新增一个在该文件夹中运行程序的窗口，并连接到这个窗口。新服务器仍会等待 PPID 1。命令参数按原样传递，只转义末尾的 `;`。文件夹或标题包含 `#[` 时会被拒绝，因为即使转义，tmux 也会把它当作样式标记。没有 Homebrew tmux 时，同样的启动会改用 RMUX，见 [RMUX](RMUX-zh-CN.md)。`CC_GG_INLINE=1` 保留以前的直接运行方式。详见 [SonicTerm 与 Shell](SonicTerm-and-Shell-zh-CN.md)。
+在 macOS 上，在 tmux 和 RMUX 外启动的 `cc` 和 `gg` 会调用 `tmux-store open DIR NAME PROGRAM ARG...`。它先检查终端、文件夹和程序，再获取锁；然后创建或复用以文件夹命名的会话，新增一个在该文件夹中运行程序的窗口，并连接到这个窗口。新服务器仍会等待 PPID 1。命令参数按原样传递，只转义末尾的 `;`。文件夹或标题包含 `#[` 时会被拒绝，因为即使转义，tmux 也会把它当作样式标记。原生 tmux 或其助手不可用时，同样的启动会改用 RMUX，见 [RMUX](RMUX-zh-CN.md)。`CC_GG_INLINE=1` 保留以前的直接运行方式。详见 [SonicTerm 与 Shell](SonicTerm-and-Shell-zh-CN.md)。
 
 安装器把验证后的主题链接到 `~/.config/tmux-apollo-theme/apollo.tmux`。不会安装 TPM、执行旧插件初始化，也不会加载归档的 tmux 配置。已有插件和 resurrect 目录保留不动。
 
