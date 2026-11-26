@@ -157,6 +157,8 @@ with open(os.environ['MUX_CAPTURE'], 'a') as stream:
     stream.write(json.dumps(['tmux-store', sys.argv[1:], os.isatty(0), os.isatty(1)]) + '\\n')
 sys.exit(int(os.environ.get('STUB_STATUS', '0')))
 ''')
+        self.zsh = self.bin / 'zsh'
+        self.zsh.symlink_to('/bin/zsh')
         self.status = self.home / 'status'
         self.prelude = (f'OSTYPE=darwin25.0; _mux_tmux_runtimes=({shlex.quote(str(self.runtime))}); ')
 
@@ -208,8 +210,8 @@ sys.exit(int(os.environ.get('STUB_STATUS', '0')))
                     self.assertTrue(stdin_tty and stdout_tty)
                     self.assertEqual(args[:2], ['open', str(ROOT)])
                     self.assertTrue(args[2].endswith(' two words #{x} end;'))
-                    self.assertEqual(args[3:5], ['/bin/zsh', '-lic'])
-                    self.assertEqual(args[6:], ['/bin/zsh', launcher, 'two words', '#{x} end;'])
+                    self.assertEqual(args[3:5], [str(self.zsh), '-lic'])
+                    self.assertEqual(args[6:], [str(self.zsh), launcher, 'two words', '#{x} end;'])
 
     def test_guards_keep_the_inline_launch(self):
         cases = {
