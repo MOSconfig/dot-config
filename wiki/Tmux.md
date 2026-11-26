@@ -17,7 +17,7 @@ th            # helper help and recovery limits
 ts            # confirm, save, restart, and restore this server's workspace
 ```
 
-On macOS and Linux, each `rX` helper runs its `tX` twin: `rr` is `tt`, `rl` is `tl`, `rd` is `td`, `rh` is `th`, and `rs` is `ts`. There is no `rmux` shell function there. New SonicTerm tabs still open a normal shell; nothing auto-attaches.
+On macOS and Linux, each `rX` helper runs its `tX` twin: `rr` is `tt`, `rl` is `tl`, `rd` is `td`, `rh` is `th`, and `rs` is `ts`. There is no `rmux` shell function there. New SonicTerm tabs still open a normal shell; nothing auto-attaches. Only an explicit `cc` or `gg` outside tmux opens a session, as described below.
 
 `tr NAME` is an interactive shortcut. Normal two-operand or option forms still use the system text utility. Use `command tr` or `/usr/bin/tr` to select that utility explicitly.
 
@@ -44,6 +44,8 @@ The profile keeps RMUX's user-visible design:
 - Splits and new windows inherit the current pane's directory.
 
 See the [tmux keymap](Tmux-Keymap.md). `cc` and `gg` rename the current native tmux window through the native helper. Their RMUX behavior and launcher defaults remain separate.
+
+On macOS, `cc` and `gg` started outside tmux and RMUX call `tmux-store open DIR NAME PROGRAM ARG...`. It checks the terminal, folder, and program before taking the lock. It then creates or reuses the session named after the folder, adds a window running the program in that folder, and attaches to that exact window. New servers still wait for PPID 1. Command arguments pass through literally; only a trailing `;` is escaped. `CC_GG_INLINE=1` keeps the old inline launch. Details are in [SonicTerm and Shell](SonicTerm-and-Shell.md).
 
 The installer links the verified theme to `~/.config/tmux-apollo-theme/apollo.tmux`. It does not install TPM, run old plugin bootstraps, or load archived tmux configuration. Existing plugin and resurrect directories are left alone.
 

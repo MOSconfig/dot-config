@@ -161,7 +161,7 @@ The profile uses both `copy-command 'pbcopy'` and `set-clipboard on`:
 
 ## Claude Code teammate mode
 
-Use normal `claude` or the repository's `cc` helper for an ordinary Claude Code session. Use RMUX explicitly when Claude Code should launch agent-team panes:
+Use normal `claude` or the repository's `cc` helper for an ordinary Claude Code session. On macOS, `cc` outside a multiplexer opens in native tmux, not RMUX; see [SonicTerm and Shell](SonicTerm-and-Shell.md). Use RMUX explicitly when Claude Code should launch agent-team panes:
 
 ```sh
 rmux claude --permission-mode bypassPermissions \

@@ -156,7 +156,7 @@ source ~/.oh-my-zsh/custom/cc.zsh
 
 `settings.json` 是符号链接，因此 CLI 持久化的偏好可能表现为源文件改动。提交前检查 `git diff -- config/claude/settings.json`，只按上面的受支持设置核对变动的键，再运行 `scripts/check.sh all`。不要整份恢复文件，以免丢失其他有意保留的修改。
 
-`cc [标题]` 会设置 SonicTerm 标题，并用相同默认值启动 Claude Code。它先检查 RMUX 并直接重命名其窗口。在原生 tmux 中，通过 `tmux-store` 重命名当前 socket 的当前窗口，不添加 `PATH` shim，也不替换真正的全局 `tmux` 可执行文件。请看 [Tmux](Tmux-zh-CN.md)。
+`cc [标题]` 会设置 SonicTerm 标题，并用相同默认值启动 Claude Code。它先检查 RMUX 并直接重命名其窗口。在原生 tmux 中，通过 `tmux-store` 重命名当前 socket 的当前窗口，不添加 `PATH` shim，也不替换真正的全局 `tmux` 可执行文件。请看 [Tmux](Tmux-zh-CN.md)。在 macOS 上，如果不在 tmux 和 RMUX 中，`cc` 会先在当前文件夹打开一个原生 tmux 窗口，让 mux-agents 可用；`CC_GG_INLINE=1` 保留直接运行方式。见 [SonicTerm 与 Shell](SonicTerm-and-Shell-zh-CN.md)。
 
 只有当 Claude Code 需要创建 agent-team 窗格时才使用 `rmux claude`。RMUX 会给这个进程一个私有 tmux 兼容 shim。不会安装全局 tmux shim。
 
@@ -203,7 +203,7 @@ WakaTime marketplace 指向官方 `wakatime/claude-code-wakatime` Git 仓库。F
 
 mermaid-tty marketplace 指向 GitHub 仓库 `D0n9X1n/mermaid-tty`。这个 plugin 会把 Claude 回复中已闭合的 `mermaid` 代码块重绘为彩色的制表符图表；凡是无法精确绘制的内容，都显示源码。`install.sh` 会在 Claude Code 中安装或更新它。除非已设置主题，它会保存默认主题（跟随 Claude Code 主题），因此 Claude Code 不会提示该选项未设置；`/mermaid-tty source` 可把图表显示为源码。
 
-mux-agents marketplace 指向 GitHub 仓库 `D0n9X1n/mux-agents`。这个 plugin 会在 tmux 或 RMUX pane 中启动 Claude Code 和 Copilot CLI 辅助 agent，在侧边栏显示每个 agent 正在做什么，并通过邮箱文件传递消息。要使用它，请在 tmux 3.2+ 或 RMUX 0.10+ 中启动 Claude。`install.sh` 会像 Feature-Crew 一样，在 PATH 上的每个 CLI 中安装或更新它。
+mux-agents marketplace 指向 GitHub 仓库 `D0n9X1n/mux-agents`。这个 plugin 会在 tmux 或 RMUX pane 中启动 Claude Code 和 Copilot CLI 辅助 agent，在侧边栏显示每个 agent 正在做什么，并通过邮箱文件传递消息。要使用它，请在 tmux 3.2+ 或 RMUX 0.10+ 中启动 Claude；在 macOS 上，多路复用器外的 `cc` 会自动完成这一步。`install.sh` 会像 Feature-Crew 一样，在 PATH 上的每个 CLI 中安装或更新它。
 
 每次运行 `install.sh`（因此也包括每次 `uu`）都会刷新所有 Claude Code marketplace，并更新每个已启用的 user plugin，包括官方 LSP 和 WakaTime plugin。Project 和 local plugin 交给各自的仓库管理。Plugin 更新在 Claude Code 重启后生效。
 

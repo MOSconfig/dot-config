@@ -12,6 +12,30 @@ function _tmux_store {
   fi
 }
 
+# cc/gg outside a multiplexer: open in a native tmux window (macOS only).
+typeset -ga _mux_tmux_runtimes=(/opt/homebrew/bin/tmux /usr/local/bin/tmux)
+
+function _mux_should_wrap {
+  emulate -L zsh
+  [[ -z "${TMUX:-}" && -z "${RMUX:-}" && -t 0 && -t 1 ]] || return 1
+  [[ "$OSTYPE" == darwin* && "${CC_GG_INLINE:-}" != 1 ]] || return 1
+  (( $+functions[_tmux_store] )) || return 1
+  [[ -x "$HOME/.local/bin/tmux-store" ]] || (( $+commands[tmux-store] )) || return 1
+  local runtime found=0
+  for runtime in $_mux_tmux_runtimes; do [[ -x "$runtime" ]] && found=1; done
+  (( found )) && [[ "${commands[zsh]:-}" == /* ]]
+}
+
+function _mux_open {
+  emulate -L zsh
+  local launcher=$1 title=$2 zsh=${commands[zsh]}
+  shift 2
+  # The window's zsh runs the launcher function in-pane, then stays as a shell.
+  _tmux_store open "$PWD" "$title" "$zsh" -lic \
+    'if (( $+functions[$1] )); then "$@"; else print -u2 -- "$1: launcher function not loaded"; fi; exec "$0" -il' \
+    "$zsh" "$launcher" "$@"
+}
+
 function tt {
   emulate -L zsh
   if (( $# != 1 )); then

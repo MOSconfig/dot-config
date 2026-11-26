@@ -17,7 +17,7 @@ th            # 助手帮助和恢复限制
 ts            # 确认、保存、重启并恢复当前服务器的工作区
 ```
 
-在 macOS 和 Linux 上，每个 `rX` 助手都运行对应的 `tX`：`rr` 就是 `tt`，`rl` 就是 `tl`，`rd` 就是 `td`，`rh` 就是 `th`，`rs` 就是 `ts`。这些系统上没有 `rmux` shell 函数。新的 SonicTerm 标签页仍打开普通 shell，不会自动连接。
+在 macOS 和 Linux 上，每个 `rX` 助手都运行对应的 `tX`：`rr` 就是 `tt`，`rl` 就是 `tl`，`rd` 就是 `td`，`rh` 就是 `th`，`rs` 就是 `ts`。这些系统上没有 `rmux` shell 函数。新的 SonicTerm 标签页仍打开普通 shell，不会自动连接。只有在 tmux 外显式运行 `cc` 或 `gg` 时才会打开会话，见下文。
 
 `tr NAME` 是交互式快捷命令。普通双参数或带选项的调用仍使用系统文本工具。可用 `command tr` 或 `/usr/bin/tr` 明确选择系统工具。
 
@@ -44,6 +44,8 @@ ts            # 确认、保存、重启并恢复当前服务器的工作区
 - 新窗格和窗口继承当前窗格的工作目录。
 
 见 [tmux 按键表](Tmux-Keymap-zh-CN.md)。`cc` 和 `gg` 通过原生助手重命名当前 tmux 窗口；它们的 RMUX 行为和启动默认值保持独立。
+
+在 macOS 上，在 tmux 和 RMUX 外启动的 `cc` 和 `gg` 会调用 `tmux-store open DIR NAME PROGRAM ARG...`。它先检查终端、文件夹和程序，再获取锁；然后创建或复用以文件夹命名的会话，新增一个在该文件夹中运行程序的窗口，并连接到这个窗口。新服务器仍会等待 PPID 1。命令参数按原样传递，只转义末尾的 `;`。`CC_GG_INLINE=1` 保留以前的直接运行方式。详见 [SonicTerm 与 Shell](SonicTerm-and-Shell-zh-CN.md)。
 
 安装器把验证后的主题链接到 `~/.config/tmux-apollo-theme/apollo.tmux`。不会安装 TPM、执行旧插件初始化，也不会加载归档的 tmux 配置。已有插件和 resurrect 目录保留不动。
 

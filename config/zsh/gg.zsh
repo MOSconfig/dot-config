@@ -1,5 +1,8 @@
 # gg [title]
 #
+# On macOS outside tmux/RMUX with a terminal, opens a native tmux window in
+# $PWD instead (see _mux_should_wrap in zz-tmux.zsh); CC_GG_INLINE=1 opts out.
+#
 # Set the current terminal tab + window title to [title], then launch
 # `copilot` in the current shell. If title is omitted, use the current
 # directory path so a bare `gg` session is still identifiable.
@@ -22,6 +25,10 @@ function gg {
   local icon=$''
   local title_text="${*:-$PWD}"
   local title="$icon $title_text"
+  if (( $+functions[_mux_should_wrap] )) && _mux_should_wrap; then
+    _mux_open gg "$title" "$@"
+    return
+  fi
   DISABLE_AUTO_TITLE=true
   print -Pn "\e]2;${title}\a"
   print -Pn "\e]1;${title}\a"

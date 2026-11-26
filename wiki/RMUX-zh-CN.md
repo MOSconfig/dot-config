@@ -161,7 +161,7 @@ set -s set-clipboard on
 
 ## Claude Code teammate mode
 
-普通 Claude Code 会话继续使用 `claude` 或仓库提供的 `cc`。需要让 Claude Code 通过窗格启动 agent team 时，再显式使用 RMUX：
+普通 Claude Code 会话继续使用 `claude` 或仓库提供的 `cc`。在 macOS 上，多路复用器外的 `cc` 会在原生 tmux 而不是 RMUX 中打开，见 [SonicTerm 与 Shell](SonicTerm-and-Shell-zh-CN.md)。需要让 Claude Code 通过窗格启动 agent team 时，再显式使用 RMUX：
 
 ```sh
 rmux claude --permission-mode bypassPermissions \
