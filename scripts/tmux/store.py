@@ -110,6 +110,37 @@ def literal(value):
     return value[:-1] + '\\;' if value.endswith(';') else value
 
 
+def argv_literal(value):
+    # Command argv is not format-expanded; only a trailing ';' still splits commands.
+    text(value)
+    return value[:-1] + '\\;' if value.endswith(';') else value
+
+
+def session_slug(directory):
+    name = re.sub(r'[.:]', '_', os.path.basename(directory.rstrip('/'))) or 'root'
+    return '_' + name[1:] if name.startswith('-') else name
+
+
+def validate_open(args):
+    require(len(args) >= 4, 'open requires DIR NAME PROGRAM ARG...')
+    directory, name, argv = args[0], args[1], list(args[2:])
+    require(os.isatty(0) and os.isatty(1), 'open needs a terminal on stdin and stdout')
+    require('RMUX' not in os.environ, 'cannot open native tmux inside RMUX; detach first')
+    require(sys.platform == 'darwin', 'open supports macOS only')
+    text(directory)
+    require(os.path.isabs(directory) and os.path.isdir(directory) and os.access(directory, os.X_OK),
+            'open DIR must be an absolute, searchable directory')
+    session = text(session_slug(directory), name=True)
+    text(name)
+    # tmux 3.8 keeps '#[' as a style marker even when '#' is doubled, so -c/-s/-n would change.
+    require('#[' not in directory and '#[' not in name, 'open DIR and NAME cannot contain #[')
+    for item in argv:
+        text(item)
+    require(os.path.isabs(argv[0]) and os.path.isfile(argv[0]) and os.access(argv[0], os.X_OK),
+            'open PROGRAM must be an absolute executable file')
+    return directory, session, name, argv
+
+
 def saved_name(value):
     text(value)
     require(re.search(r'(?<!\\)(?:\\\\)*\\(?!\\)', value) is None,
@@ -394,14 +425,14 @@ class Store(PrivateState):
         require(len(matches) <= 1, 'duplicate exact session name')
         return matches[0] if matches else None
 
-    def bootstrap(self, runtime, name, width=80, height=24, cwd=None, window_name=None):
+    def bootstrap(self, runtime, name, width=80, height=24, cwd=None, window_name=None, argv=None):
         self.validate_runtime(runtime)
         require(self.probe(runtime) is None, 'new-server bootstrap requires an absent socket')
         socket_parent = Path(self.socket).parent
         if not socket_parent.exists():
             socket_parent.mkdir(mode=0o700, exist_ok=True)
         canonical_socket(self.socket)
-        args = self.new_session(name, width, height, cwd, window_name)
+        args = self.new_session(name, width, height, cwd, window_name, argv)
         output = self.command(runtime, args, no_start=False)
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:
@@ -420,7 +451,7 @@ class Store(PrivateState):
                 'login shell is not an available executable')
         return [shell, '-l']
 
-    def new_session(self, name, width=80, height=24, cwd=None, window_name=None):
+    def new_session(self, name, width=80, height=24, cwd=None, window_name=None, argv=None):
         text(name, name=True)
         args = ['new-session', '-d', '-P', '-F', '#{session_id}|#{window_id}|#{pane_id}',
                 '-s', literal(name), '-x', str(integer(width, 1, 10000)), '-y', str(integer(height, 1, 10000))]
@@ -428,7 +459,7 @@ class Store(PrivateState):
             args += ['-c', literal(cwd)]
         if window_name:
             args += ['-n', literal(window_name)]
-        return args + self.fresh_shell()
+        return args + (list(argv) if argv else self.fresh_shell())
 
     def current_pane(self, active):
         context = native_context()
@@ -462,6 +493,33 @@ class Store(PrivateState):
                 sid = self.session_id(runtime, name)
             require(sid is not None, 'created exact session was not found')
         args = ['switch-client', '-c', client, '-t', sid] if client else ['attach-session', '-t', sid]
+        argv = self.argv(runtime, args)
+        os.execve(argv[0], argv, self.environment())
+
+    def open(self, directory, session, name, argv):
+        command = [argv_literal(item) for item in argv]
+        with self.lock():
+            active = self.ensure_active()
+            runtime = active['runtime']
+            sid = self.session_id(runtime, session) if active['server'] else None
+            client = self.calling_client(active) if native_context() else None
+            if sid is not None:
+                target = self.command(runtime, [
+                    'new-window', '-d', '-P', '-F', '#{session_id}:#{window_id}', '-t', sid + ':',
+                    '-c', literal(directory), '-n', literal(name)] + command)
+            else:
+                if active['server'] is None:
+                    output = self.bootstrap(runtime, session, cwd=directory, window_name=name, argv=command)
+                    self.record_active(runtime)
+                else:
+                    output = self.command(runtime, self.new_session(session, cwd=directory, window_name=name,
+                                                                    argv=command))
+                parts = output.split('|')
+                require(len(parts) == 3, 'created window was not reported')
+                target = parts[0] + ':' + parts[1]
+            sid, _, wid = target.partition(':')
+            target = identifier(sid, '$') + ':' + identifier(wid, '@')
+        args = ['switch-client', '-c', client, '-t', target] if client else ['attach-session', '-t', target]
         argv = self.argv(runtime, args)
         os.execve(argv[0], argv, self.environment())
 
@@ -723,6 +781,8 @@ HELP = '''Native tmux helpers
   td NAME           Permanently stop the exact named session and its programs.
   ts                Confirm, save and restart ALL sessions on the selected socket.
   th                Show helper usage and upgrade steps.
+  cc / gg           Outside tmux on macOS: open in a folder-named session window
+                    (tmux-store open DIR NAME PROGRAM ARG...). CC_GG_INLINE=1 opts out.
 
 Upgrade: brew upgrade tmux; then run ts when ready to stop running programs.
 The matching Homebrew Cellar executable is reused, NOT copied or retained.
@@ -750,12 +810,24 @@ def main(args=None):
     args = sys.argv[1:] if args is None else args
     command = args[0] if args else 'help'
     arity = {'attach': 2, 'delete': 2, 'rename': 2, 'list': 1, 'restart': 1, 'help': 1}
+    if command == 'open':
+        if len(args) < 5:
+            print('Usage: tmux-store open DIR NAME PROGRAM ARG...\n'
+                  'Set CC_GG_INLINE=1 to run cc/gg without tmux.', file=sys.stderr)
+            return 2
+        try:
+            request = validate_open(args[1:])
+            Store().open(*request)
+            return 0
+        except (StoreError, OSError, subprocess.SubprocessError, UnicodeError, EOFError, KeyboardInterrupt) as exc:
+            print(f'tmux-store: {exc}\nSet CC_GG_INLINE=1 to run cc/gg without tmux.', file=sys.stderr)
+            return 1
     if command == 'help' and len(args) <= 1:
         print(HELP)
         return 0
     if (command not in arity and command not in ('client', '_worker') or
             command in arity and len(args) != arity[command]):
-        print('Usage: tmux-store {attach NAME|list|delete NAME|restart|help|rename TITLE|client ARGS...}', file=sys.stderr)
+        print('Usage: tmux-store {attach NAME|open DIR NAME PROGRAM ARG...|list|delete NAME|restart|help|rename TITLE|client ARGS...}', file=sys.stderr)
         return 2
     try:
         if command == '_worker':

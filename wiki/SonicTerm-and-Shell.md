@@ -192,6 +192,8 @@ Outside both engines, `exit`, `logout`, and Ctrl+D keep normal shell behavior.
 
 `cc [title]` and `gg [title]` send OSC 1 and OSC 2 titles to SonicTerm. They check RMUX first and rename its window directly. In native tmux, they use `tmux-store` to rename the current window on the current socket. When no title is given, they use the current path.
 
+On macOS, outside tmux and RMUX (both variables unset), `cc` and `gg` open in native tmux so [mux-agents](Claude-Code.md) has a pane. They run `tmux-store open`: the session is named after the current folder (`.`, `:`, and a leading `-` become `_`; `/` becomes `root`). A running session gets a new window. The window starts in the current folder, runs `cc` or `gg` there, and keeps a shell when the agent exits. `cc`/`gg` return the attach status. They do not also start inline. They run inline as before when stdin or stdout is not a terminal, on Linux or Windows, when the helper or Homebrew tmux is missing, or with `CC_GG_INLINE=1`. If `tmux-store open` fails, the error names that opt-out. RMUX and Linux support are tracked in [#169](https://github.com/MOSconfig/dot-config/issues/169).
+
 The native path does not change `PATH` or replace the global `tmux` command. RMUX's private teammate shim remains separate. They set `DISABLE_AUTO_TITLE` while the CLI runs so oh-my-zsh does not replace the title.
 
 `claude` and `cc` default to native `claude-opus-5-5[1m]` with `--effort xhigh`; the relay maps that to `claude-opus-5.5`. `gg` keeps its separate Astra/`xhigh` defaults. Open a new shell after installation or follow the reload steps in [Claude Code](Claude-Code.md).

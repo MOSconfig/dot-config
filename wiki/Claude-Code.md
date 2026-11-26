@@ -156,7 +156,7 @@ The binary rejects `permissions.defaultMode: bypassPermissions` in settings. The
 
 Because `settings.json` is a symlink, CLI-persisted preferences can appear as source changes. Review `git diff -- config/claude/settings.json` before committing, reconcile only the changed keys with the supported settings above, and rerun `scripts/check.sh all`. Do not restore the whole file and lose other intentional edits.
 
-`cc [title]` sets the SonicTerm title and starts Claude Code with the same defaults. It checks RMUX first and renames its window directly. In native tmux, it uses `tmux-store` to rename the current window on the current socket, without a `PATH` shim. It does not replace the real global `tmux` executable. See [Tmux](Tmux.md).
+`cc [title]` sets the SonicTerm title and starts Claude Code with the same defaults. It checks RMUX first and renames its window directly. In native tmux, it uses `tmux-store` to rename the current window on the current socket, without a `PATH` shim. It does not replace the real global `tmux` executable. See [Tmux](Tmux.md). On macOS, outside tmux and RMUX, `cc` opens a native tmux window in the current folder first, so mux-agents works; `CC_GG_INLINE=1` keeps the inline launch. See [SonicTerm and Shell](SonicTerm-and-Shell.md).
 
 Use `rmux claude` only when Claude Code should create agent-team panes. RMUX gives that process a private tmux-compatible shim. No global tmux shim is installed.
 
@@ -203,7 +203,7 @@ The WakaTime marketplace points to the official `wakatime/claude-code-wakatime` 
 
 The mermaid-tty marketplace points to the GitHub repository `D0n9X1n/mermaid-tty`. The plugin redraws closed `mermaid` fences in Claude's replies as colored box-drawing diagrams, and shows the source for anything it can't draw exactly. `install.sh` installs or updates it in Claude Code. It saves the default theme, which follows the Claude Code theme, unless a theme is already set, so Claude Code does not report the option as unset; `/mermaid-tty source` shows diagrams as source.
 
-The mux-agents marketplace points to the GitHub repository `D0n9X1n/mux-agents`. The plugin starts Claude Code and Copilot CLI helper agents in tmux or RMUX panes, shows what each is doing in a side bar, and passes messages through mailbox files. Start Claude inside tmux 3.2+ or RMUX 0.10+ to use it. `install.sh` installs or updates it in each CLI on PATH, like Feature-Crew.
+The mux-agents marketplace points to the GitHub repository `D0n9X1n/mux-agents`. The plugin starts Claude Code and Copilot CLI helper agents in tmux or RMUX panes, shows what each is doing in a side bar, and passes messages through mailbox files. Start Claude inside tmux 3.2+ or RMUX 0.10+ to use it; on macOS, `cc` outside a multiplexer does this for you. `install.sh` installs or updates it in each CLI on PATH, like Feature-Crew.
 
 Every `install.sh` run, and so every `uu`, also refreshes all Claude Code marketplaces and updates each enabled user plugin, including the official LSP and WakaTime plugins. Project and local plugins are left to their repos. A plugin update applies after Claude Code restarts.
 

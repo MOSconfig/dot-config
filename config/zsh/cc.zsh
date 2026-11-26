@@ -1,5 +1,8 @@
 # cc [title]
 #
+# On macOS outside tmux/RMUX with a terminal, opens a native tmux window in
+# $PWD instead (see _mux_should_wrap in zz-tmux.zsh); CC_GG_INLINE=1 opts out.
+#
 # Sibling of `gg` (config/zsh/gg.zsh) but launches Anthropic's
 # Claude Code CLI instead of GitHub Copilot CLI. Sets the active terminal
 # tab + window title to [title] via OSC 1/2 and tells RMUX directly so the
@@ -28,6 +31,10 @@ function cc {
   local icon=$''
   local title_text="${*:-$PWD}"
   local title="$icon $title_text"
+  if (( $+functions[_mux_should_wrap] )) && _mux_should_wrap; then
+    _mux_open cc "$title" "$@"
+    return
+  fi
   DISABLE_AUTO_TITLE=true
   print -Pn "\e]2;${title}\a"
   print -Pn "\e]1;${title}\a"

@@ -523,6 +523,176 @@ class StoreTests(unittest.TestCase):
             factory.assert_not_called()
 
 
+class OpenTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix='tmux-store-open-')
+        self.addCleanup(self.temp.cleanup)
+        self.home = Path(self.temp.name).resolve()
+        self.binary = self.home / 'tmux'
+        self.binary.write_bytes(b'fixture-native-tmux')
+        self.binary.chmod(0o700)
+        self.project = self.home / 'my.app'
+        self.project.mkdir()
+        self.shell = self.home / 'zsh'
+        self.shell.write_text('#!/bin/sh\n')
+        self.shell.chmod(0o700)
+        self.argv = [str(self.shell), '-lic', 'cc "$@"', str(self.shell), 'cc', 'x #{y};']
+        self.environment = patch.dict(os.environ, {}, clear=True)
+        self.environment.start()
+        self.addCleanup(self.environment.stop)
+        tty = patch.object(store.os, 'isatty', return_value=True)
+        tty.start()
+        self.addCleanup(tty.stop)
+        darwin = patch.object(store.sys, 'platform', 'darwin')
+        darwin.start()
+        self.addCleanup(darwin.stop)
+        self.manager = store.Store(home=self.home, installed=self.binary, socket=self.home / 'socket')
+        self.runtime = {'path': str(self.binary), 'hash': store.digest(self.binary), 'version': '3.7c'}
+        self.server = {'pid': 42, 'socket': self.manager.socket, 'start': '100.000001', 'started': 100, 'version': '3.7c'}
+        self.active = {'version': 1, 'runtime': self.runtime, 'server': self.server}
+
+    def request(self, directory=None, name='✨ title', argv=None):
+        return store.validate_open([str(directory or self.project), name] + (self.argv if argv is None else argv))
+
+    def test_session_slug_is_a_valid_exact_name(self):
+        for path, name in [('/', 'root'), ('/w/my.app', 'my_app'), ('/w/a.b:c', 'a_b_c'),
+                           ('/w/-x', '_x'), ('/w/.cfg', '_cfg'), ('/w/plain dir', 'plain dir')]:
+            with self.subTest(path=path):
+                self.assertEqual(store.session_slug(path), name)
+                store.text(name, name=True)
+
+    def test_argv_items_keep_hashes_and_escape_only_a_trailing_semicolon(self):
+        self.assertEqual(store.argv_literal('#{pane_id} a;b'), '#{pane_id} a;b')
+        self.assertEqual(store.argv_literal('end;'), 'end\\;')
+        with self.assertRaises(store.StoreError): store.argv_literal('bad\nline')
+
+    def test_validate_open_returns_slug_and_literal_parts(self):
+        directory, session, name, argv = self.request()
+        self.assertEqual((directory, session, name, argv), (str(self.project), 'my_app', '✨ title', self.argv))
+
+    def test_validate_open_refuses_before_any_store_work(self):
+        file = self.home / 'file'
+        file.write_text('x')
+        locked = self.home / 'locked'
+        locked.mkdir(mode=0o600)
+        self.addCleanup(locked.chmod, 0o700)
+        nested = self.home / 'bad\nname'
+        nested.mkdir()
+        styled = self.home / 'folder#[fg=red]'
+        styled.mkdir()
+        cases = {
+            'relative dir': dict(directory='relative'),
+            'missing dir': dict(directory=self.home / 'missing'),
+            'regular file dir': dict(directory=file),
+            'executable file dir': dict(directory=self.shell),
+            'unsearchable dir': dict(directory=locked),
+            'unrepresentable dir': dict(directory=nested),
+            'style marker dir': dict(directory=styled),
+            'style marker name': dict(name='fix #[bold]'),
+            'empty name': dict(name=''),
+            'control name': dict(name='a\tb'),
+            'single operand': dict(argv=[str(self.shell)]),
+            'relative program': dict(argv=['zsh', '-lic', 'cc']),
+            'missing program': dict(argv=[str(self.home / 'nope'), '-c', 'x']),
+            'directory program': dict(argv=[str(self.project), '-c', 'x']),
+            'non-executable program': dict(argv=[str(file), '-c', 'x']),
+            'empty argument': dict(argv=[str(self.shell), '']),
+        }
+        for label, kwargs in cases.items():
+            with self.subTest(label), patch.object(store, 'Store') as factory:
+                with self.assertRaises(store.StoreError): self.request(**kwargs)
+                factory.assert_not_called()
+
+    def test_validate_open_requires_terminals_darwin_and_no_rmux(self):
+        for label, change in [('stdin', lambda: patch.object(store.os, 'isatty', side_effect=lambda fd: fd != 0)),
+                              ('stdout', lambda: patch.object(store.os, 'isatty', side_effect=lambda fd: fd != 1)),
+                              ('linux', lambda: patch.object(store.sys, 'platform', 'linux')),
+                              ('rmux', lambda: patch.dict(os.environ, {'RMUX': '/r,1,0'})),
+                              ('empty rmux', lambda: patch.dict(os.environ, {'RMUX': ''}))]:
+            with self.subTest(label), change():
+                with self.assertRaises(store.StoreError): self.request()
+
+    def test_cold_open_bootstraps_records_and_attaches_exact_window(self):
+        with patch.object(self.manager, 'ensure_active', return_value=dict(self.active, server=None)), \
+             patch.object(self.manager, 'bootstrap', return_value='$3|@7|%9') as bootstrap, \
+             patch.object(self.manager, 'record_active') as record, patch.object(store.os, 'execve') as execute:
+            self.manager.open(*self.request())
+            bootstrap.assert_called_once_with(self.runtime, 'my_app', cwd=str(self.project), window_name='✨ title',
+                                              argv=self.argv[:-1] + ['x #{y}\\;'])
+            record.assert_called_once_with(self.runtime)
+            argv, env = execute.call_args.args[1:]
+            self.assertEqual(argv[-3:], ['attach-session', '-t', '$3:@7'])
+            self.assertNotIn('TMUX', env)
+
+    def test_bootstrap_and_new_session_use_given_argv_and_literal_names(self):
+        args = self.manager.new_session('my_app', cwd='/w/#a;', window_name='n #{x};', argv=['/bin/zsh', 'a#b;'])
+        self.assertEqual(args[-2:], ['/bin/zsh', 'a#b;'])
+        self.assertIn('/w/##a\\;', args)
+        self.assertIn('n ##{x}\\;', args)
+        self.assertEqual(self.manager.new_session('plain')[-1], '-l')
+
+    def test_open_without_session_creates_it_with_argv(self):
+        with patch.object(self.manager, 'ensure_active', return_value=self.active), \
+             patch.object(self.manager, 'session_id', return_value=None), \
+             patch.object(self.manager, 'command', return_value='$4|@8|%1') as command, \
+             patch.object(store.os, 'execve') as execute:
+            self.manager.open(*self.request())
+            args = command.call_args.args[1]
+            self.assertEqual(args[:1], ['new-session'])
+            self.assertEqual(args[args.index('-s') + 1], 'my_app')
+            self.assertEqual(args[args.index('-c') + 1], str(self.project))
+            self.assertEqual(args[-len(self.argv):], self.argv[:-1] + ['x #{y}\\;'])
+            self.assertEqual(execute.call_args.args[1][-1], '$4:@8')
+
+    def test_open_with_session_adds_window_and_targets_it(self):
+        with patch.object(self.manager, 'ensure_active', return_value=self.active), \
+             patch.object(self.manager, 'session_id', return_value='$2'), \
+             patch.object(self.manager, 'command', return_value='$2:@5') as command, \
+             patch.object(store.os, 'execve') as execute:
+            self.manager.open(*self.request(name='w #{x};'))
+            command.assert_called_once_with(self.runtime, [
+                'new-window', '-d', '-P', '-F', '#{session_id}:#{window_id}', '-t', '$2:',
+                '-c', str(self.project), '-n', 'w ##{x}\\;'] + self.argv[:-1] + ['x #{y}\\;'])
+            self.assertEqual(execute.call_args.args[1][-3:], ['attach-session', '-t', '$2:@5'])
+
+    def test_open_refuses_malformed_created_target(self):
+        with patch.object(self.manager, 'ensure_active', return_value=self.active), \
+             patch.object(self.manager, 'session_id', return_value='$2'), \
+             patch.object(self.manager, 'command', return_value='$2:@x'), patch.object(store.os, 'execve') as execute:
+            with self.assertRaises(store.StoreError): self.manager.open(*self.request())
+            execute.assert_not_called()
+
+    def test_native_open_switches_calling_client(self):
+        with patch.dict(os.environ, {'TMUX': self.manager.socket + ',42,1', 'TMUX_PANE': '%3'}), \
+             patch.object(self.manager, 'ensure_active', return_value=self.active), \
+             patch.object(self.manager, 'session_id', return_value='$2'), \
+             patch.object(self.manager, 'command', return_value='$2:@5'), \
+             patch.object(self.manager, 'calling_client', return_value='/dev/ttys123'), \
+             patch.object(store.os, 'execve') as execute:
+            self.manager.open(str(self.project), 'my_app', 'n', self.argv)
+            self.assertEqual(execute.call_args.args[1][-5:], ['switch-client', '-c', '/dev/ttys123', '-t', '$2:@5'])
+
+    def test_cli_open_validates_before_constructing_store(self):
+        with patch.object(store, 'Store') as factory, patch('sys.stderr', new_callable=io.StringIO) as err:
+            self.assertEqual(store.main(['open', 'relative', 'n', str(self.shell), '-c']), 1)
+            factory.assert_not_called()
+            self.assertIn('CC_GG_INLINE=1', err.getvalue())
+        with patch.object(store, 'Store') as factory, patch('sys.stderr', new_callable=io.StringIO) as err:
+            self.assertEqual(store.main(['open', str(self.project)]), 2)
+            factory.assert_not_called()
+            self.assertIn('CC_GG_INLINE=1', err.getvalue())
+        with patch.object(store, 'Store') as factory:
+            self.assertEqual(store.main(['open', str(self.project), 'n'] + self.argv), 0)
+            factory.return_value.open.assert_called_once_with(str(self.project), 'my_app', 'n', self.argv)
+
+    def test_wrapper_ignores_current_directory_modules(self):
+        (self.project / 'json.py').write_text('raise SystemExit("shadowed")\n')
+        result = subprocess.run([str(MODULE.with_name('tmux-store')), 'help'], cwd=self.project,
+                                capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('Native tmux helpers', result.stdout)
+
+
 BINARY = next((str(path) for path in (Path('/opt/homebrew/bin/tmux'), Path('/usr/local/bin/tmux')) if path.exists()), None)
 
 
@@ -545,6 +715,24 @@ class RuntimeTests(unittest.TestCase):
         shell.start()
         self.addCleanup(shell.stop)
         self.addCleanup(lambda: self.manager.run(self.runtime, ['kill-server']))
+
+    def test_private_open_runs_argv_in_directory_then_adds_window(self):
+        project = self.home / 'proj.x'
+        project.mkdir()
+        marker = self.home / 'marker'
+        argv = ['/bin/sh', '-c', 'pwd >> "$1"; printf "%s\\n" "$2" >> "$1"; sleep 30', 'sh', str(marker), 'a #{b};']
+        with patch.object(store.os, 'execve') as execute:
+            self.manager.open(str(project), 'proj_x', 'w #{n};', argv)
+            self.manager.open(str(project), 'proj_x', 'second', argv[:5] + ['two'])
+        first, second = (call.args[1][-1] for call in execute.call_args_list)
+        windows = self.manager.query(self.runtime, ['list-windows', '-t', '=proj_x'], store.WINDOW)
+        self.assertEqual([w['window_name'] for w in windows], ['w #{n};', 'second'])
+        self.assertEqual(first.split(':')[0], second.split(':')[0])
+        for _ in range(100):
+            if marker.exists() and len(marker.read_text().splitlines()) >= 4: break
+            store.time.sleep(.05)
+        lines = marker.read_text().splitlines()
+        self.assertEqual(sorted(lines), sorted([str(project), 'a #{b};', str(project), 'two']))
 
     def test_private_first_launch_creates_owned_socket_directory(self):
         socket = self.home / 'new' / 'sock'
