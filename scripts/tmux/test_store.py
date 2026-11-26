@@ -595,6 +595,7 @@ class OpenTests(unittest.TestCase):
             'relative program': dict(argv=['zsh', '-lic', 'cc']),
             'missing program': dict(argv=[str(self.home / 'nope'), '-c', 'x']),
             'directory program': dict(argv=[str(self.project), '-c', 'x']),
+            'non-executable program': dict(argv=[str(file), '-c', 'x']),
             'empty argument': dict(argv=[str(self.shell), '']),
         }
         for label, kwargs in cases.items():

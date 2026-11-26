@@ -224,19 +224,34 @@ sys.exit(int(os.environ.get('STUB_STATUS', '0')))
             'no store function': ('unfunction _tmux_store; ', {}),
             'stale helper hash': (f'rm {shlex.quote(str(self.bin / "tmux-store"))}; '
                                   f'hash tmux-store={shlex.quote(str(self.home))}; ', {}),
+            'first runtime not executable': (
+                f'_mux_tmux_runtimes=({shlex.quote(str(self.home / "plain"))} '
+                f'{shlex.quote(str(self.runtime))}); ', {}),
             'relative zsh': ('hash zsh=zsh; ', {}),
             'stdin redirected': ('exec </dev/null; ', {}),
             'stdout redirected': (f'exec >{shlex.quote(str(self.home / "out"))}; ', {}),
         }
+        stub = (self.bin / 'tmux-store').read_text()
+        (self.home / 'plain').write_text('not executable\n')
         for label, (extra, env) in cases.items():
             with self.subTest(label):
                 self.capture.unlink(missing_ok=True)
+                (self.bin / 'tmux-store').write_text(stub)
+                (self.bin / 'tmux-store').chmod(0o755)
                 code = (SOURCE + LAUNCHERS + self.prelude + extra +
                         f'cc t; print -r -- $? > {shlex.quote(str(self.status))}')
                 self.pty(code, **env)
                 self.assertEqual(self.status.read_text().split(), ['0'])
                 self.assertIn('claude', [call[0] for call in self.calls()])
                 self.assertNotIn(['open'], [call[1][:1] for call in self.calls() if call[0] == 'tmux-store'])
+
+    def test_directory_helper_is_skipped_by_guard_and_dispatch_alike(self):
+        (self.home / '.local' / 'bin' / 'tmux-store').mkdir(parents=True)
+        self.assertEqual(self.wrapped('cc', 0), ['0', 'unset'])
+        self.assertEqual([call[1][0] for call in self.calls()], ['open'])
+
+    def test_wrap_keeps_a_preset_auto_title_setting(self):
+        self.assertEqual(self.wrapped('gg', 0, extra='DISABLE_AUTO_TITLE=keep; '), ['0', 'keep'])
 
     def test_no_terminal_keeps_the_inline_launch(self):
         self.shell(self.prelude + LAUNCHERS + 'cc t; gg t')

@@ -1,11 +1,19 @@
 unalias tt tl td th ts 2>/dev/null
 unfunction tt tl td th ts 2>/dev/null
 
+# Print the helper _tmux_store runs: the first executable regular file.
+function _tmux_store_path {
+  local helper
+  for helper in "$HOME/.local/bin/tmux-store" "${commands[tmux-store]:-}"; do
+    [[ -n "$helper" && -f "$helper" && -x "$helper" ]] && { print -r -- "$helper"; return 0; }
+  done
+  return 1
+}
+
 function _tmux_store {
-  if [[ -x "$HOME/.local/bin/tmux-store" ]]; then
-    "$HOME/.local/bin/tmux-store" "$@"
-  elif (( $+commands[tmux-store] )); then
-    command tmux-store "$@"
+  local helper
+  if helper=$(_tmux_store_path); then
+    "$helper" "$@"
   else
     print -u2 'Tmux helpers are not installed; run ./install.sh in dot-configs.'
     return 127
@@ -19,13 +27,15 @@ function _mux_should_wrap {
   emulate -L zsh
   (( ! ${+TMUX} && ! ${+RMUX} )) && [[ -t 0 && -t 1 ]] || return 1
   [[ "$OSTYPE" == darwin* && "${CC_GG_INLINE:-}" != 1 ]] || return 1
-  (( $+functions[_tmux_store] )) || return 1
-  local helper=${commands[tmux-store]:-}
-  [[ -x "$HOME/.local/bin/tmux-store" && -f "$HOME/.local/bin/tmux-store" ]] ||
-    [[ -n "$helper" && -x "$helper" && -f "$helper" ]] || return 1
-  local runtime found=0
-  for runtime in $_mux_tmux_runtimes; do [[ -x "$runtime" && -f "$runtime" ]] && found=1; done
-  (( found )) && [[ "${commands[zsh]:-}" == /* ]]
+  (( $+functions[_tmux_store] )) && _tmux_store_path >/dev/null || return 1
+  # Same choice as store.py: the first runtime path that is a file must be executable.
+  local runtime
+  for runtime in $_mux_tmux_runtimes; do
+    [[ -f "$runtime" ]] || continue
+    [[ -x "$runtime" && "${commands[zsh]:-}" == /* ]]
+    return
+  done
+  return 1
 }
 
 function _mux_open {
