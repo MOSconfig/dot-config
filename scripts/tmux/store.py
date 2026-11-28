@@ -261,9 +261,7 @@ class Store(PrivateState):
         return runtime
 
     def argv(self, runtime, args, no_start=True):
-        # -u: names are UTF-8 whatever the locale; under LC_ALL=C tmux would print '_' for each
-        # byte and the length-prefixed records could no longer be read.
-        command = [runtime['path'], '-u', '-S', self.socket]
+        command = [runtime['path'], '-S', self.socket]
         if self.config is not None:
             command += ['-f', self.config]
         if no_start:
@@ -271,7 +269,11 @@ class Store(PrivateState):
         return command + list(args)
 
     def run(self, runtime, args, no_start=True):
-        return subprocess.run(self.argv(runtime, args, no_start), env=self.environment(), capture_output=True,
+        # -u for the store's own reads only: names are UTF-8 whatever the locale (under LC_ALL=C tmux
+        # prints '_' per byte, and length-prefixed records could not be read). Attached clients
+        # (argv() + execve) keep tmux's own detection, so a non-UTF-8 terminal gets what it can show.
+        argv = self.argv(runtime, args, no_start)
+        return subprocess.run(argv[:1] + ['-u'] + argv[1:], env=self.environment(), capture_output=True,
                               encoding='utf-8', errors='strict', timeout=30)
 
     def command(self, runtime, args, no_start=True):

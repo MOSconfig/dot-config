@@ -143,9 +143,14 @@ class StoreTests(unittest.TestCase):
             argv = self.manager.argv(self.runtime, ['list-sessions'])
             self.assertEqual(argv[0], str(self.binary))
             self.assertIn('-N', argv)
-            # -u: tmux reports names as UTF-8 even under LC_ALL=C, so a Unicode name stays readable.
-            self.assertEqual(argv[1], '-u')
+            # A client keeps tmux's own UTF-8 detection, so a non-UTF-8 terminal is not sent bytes it cannot show.
+            self.assertNotIn('-u', argv)
             self.assertEqual(argv[argv.index('-S') + 1], self.manager.socket)
+            # The store's own reads force UTF-8, so a Unicode name stays readable under LC_ALL=C.
+            with patch.object(store.subprocess, 'run') as run:
+                self.manager.run(self.runtime, ['list-sessions'])
+                self.assertEqual(run.call_args.args[0][1], '-u')
+                self.assertEqual(run.call_args.args[0][2:], argv[1:])
             default = store.Store(home=self.home, socket=self.home / 'second')
             self.assertIn(str(default.installed), ('/opt/homebrew/bin/tmux', '/usr/local/bin/tmux'))
 
