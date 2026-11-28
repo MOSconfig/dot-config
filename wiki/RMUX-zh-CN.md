@@ -161,7 +161,7 @@ set -s set-clipboard on
 
 ## Claude Code teammate mode
 
-普通 Claude Code 会话继续使用 `claude` 或仓库提供的 `cc`。在 macOS 上，多路复用器外的 `cc` 会在原生 tmux 中打开；原生 tmux 或其助手不可用、且已安装 `rmux`、`rmux-daemon` 和 RMUX 助手时用 RMUX。此时 `rmux-store open DIR NAME PROGRAM ARG...` 会创建或复用以文件夹命名的会话，新增一个窗口，新服务器会等待 PPID 1，然后连接到这个窗口。参数和窗口名按原样传递，末尾的 `;` 会被转义。文件夹包含 `#` 或 `\`、或标题包含 `\` 时会被拒绝，因为 RMUX 0.10 会在 `-c`、`-s` 和重命名中改变它们。文件夹名包含不可见字符（例如 U+200D）时也会被拒绝，因为 RMUX 会以转义形式报告它们，无法复用会话；中文和带重音的名称可以正常使用。见 [SonicTerm 与 Shell](SonicTerm-and-Shell-zh-CN.md)。需要让 Claude Code 通过窗格启动 agent team 时，再显式使用 RMUX：
+普通 Claude Code 会话继续使用 `claude` 或仓库提供的 `cc`。在 macOS 上，多路复用器外的 `cc` 会在原生 tmux 中打开；原生 tmux 或其助手不可用、且已安装 `rmux`、`rmux-daemon` 和 RMUX 助手时用 RMUX。此时 `rmux-store open DIR NAME SESSION PROGRAM ARG...` 用 SESSION（启动器的词语）作会话名，为空时用文件夹名。该会话已在运行时，直接连接到它，保持原样，不新增窗口。否则创建该会话及一个窗口，新服务器会等待 PPID 1，然后连接到这个窗口。参数、名称和窗口名按原样传递，包括 `#`；末尾的 `;` 会被转义，重启后恢复会话时也一样。会话名包含 `\` 或不可见字符（例如 U+200D）时会被拒绝，因为 RMUX 会在 `-s` 中把 `\` 加倍，并以转义形式报告不可见字符，之后就找不到这个会话；中文和带重音的名称可以正常使用。只有需要创建会话时，文件夹包含 `#` 或 `\`、或标题包含 `\` 才会被拒绝，因为 RMUX 0.10 会在 `-c` 和重命名中改变它们。见 [SonicTerm 与 Shell](SonicTerm-and-Shell-zh-CN.md)。需要让 Claude Code 通过窗格启动 agent team 时，再显式使用 RMUX：
 
 ```sh
 rmux claude --permission-mode bypassPermissions \

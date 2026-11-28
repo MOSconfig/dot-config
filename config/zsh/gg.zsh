@@ -1,7 +1,9 @@
-# gg [title]
+# gg [words]
 #
-# On macOS outside tmux/RMUX with a terminal, opens a window in $PWD in native
-# tmux, else RMUX (see _mux_backend in zz-tmux.zsh); CC_GG_INLINE=1 opts out.
+# On macOS outside tmux/RMUX with a terminal, opens Copilot CLI in native tmux,
+# else RMUX (see _mux_backend in zz-tmux.zsh); CC_GG_INLINE=1 opts out. The
+# words name the session (none: the current folder's name). When that session
+# already runs, gg attaches to it as it is and starts no second Copilot CLI.
 #
 # Set the current terminal tab + window title to [title], then launch
 # `copilot` in the current shell. If title is omitted, use the current
@@ -23,7 +25,10 @@ function gg {
   # Copilot CLI session. fa-github (U+F09B) is the GitHub octocat — the
   # most direct "this is GitHub Copilot" signal.
   local icon=$''
-  local title_text="${*:-$PWD}"
+  # Words join with one space whatever the caller's IFS is, as _mux_open joins the session name.
+  local IFS=' '
+  local title_text="$*"
+  [[ -n "$title_text" ]] || title_text=$PWD
   local title="$icon $title_text"
   if (( $+functions[_mux_should_wrap] )) && _mux_should_wrap; then
     _mux_open gg "$title" "$@"

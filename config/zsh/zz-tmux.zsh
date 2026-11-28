@@ -65,13 +65,18 @@ function _mux_open {
   emulate -L zsh
   local launcher=$1 title=$2 zsh=${commands[zsh]} backend
   shift 2
+  # The launcher's words, joined by one space whatever the caller's IFS is, name the session;
+  # none means the folder.
+  local IFS=' '
+  local session="$*"
   if ! backend=$(_mux_backend); then
     print -u2 -- "$launcher: no tmux or RMUX available; set CC_GG_INLINE=1 to run without one."
     return 1
   fi
   local store=_${backend}_store
-  # The window's zsh runs the launcher function in-pane, then stays as a shell.
-  $store open "$PWD" "$title" "$zsh" -lic \
+  # The window's zsh runs the launcher function in-pane, then stays as a shell. An existing session
+  # of that name is attached as it is, so this only runs in a new one.
+  $store open "$PWD" "$title" "$session" "$zsh" -lic \
     'if (( $+functions[$1] )); then "$@"; else print -u2 -- "$1: launcher function not loaded"; fi; exec "$0" -il' \
     "$zsh" "$launcher" "$@"
 }

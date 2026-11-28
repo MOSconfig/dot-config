@@ -249,8 +249,9 @@ class OpenTests(unittest.TestCase):
         self.runtime = {'hash': 'h', 'path': str(self.bin), 'files': {}}
         self.active = {'version': 1, 'runtime': self.runtime, 'server': {'pid': 42, 'start': 's', 'socket': '/x'}}
 
-    def request(self, directory=None, name='✨ title', argv=None):
-        return store.validate_rmux_open([str(directory or self.project), name] + (self.argv if argv is None else argv))
+    def request(self, directory=None, name='✨ title', argv=None, session=''):
+        return store.validate_rmux_open([str(directory or self.project), name, session] +
+                                        (self.argv if argv is None else argv))
 
     def test_validate_shares_the_native_rules_but_allows_style_markers(self):
         self.assertEqual(self.request(name='fix #[bold] #{x}')[2], 'fix #[bold] #{x}')
@@ -259,10 +260,11 @@ class OpenTests(unittest.TestCase):
         for path, slug in ((self.home / '日本', '日本'), (self.home / 'café', 'café')):
             path.mkdir()
             self.assertEqual(self.request(path)[1], slug)
-        for label, kwargs in {'hash dir': dict(directory=hashed),
-                              'escaped session name': dict(directory=joined),
-                              'backslash dir': dict(directory=slashed),
-                              'backslash name': dict(name='a\\b'),
+        for label, kwargs in {'escaped session name': dict(directory=joined),
+                              'backslash session from dir': dict(directory=slashed),
+                              'backslash session': dict(session='a\\b'),
+                              'invisible session': dict(session='team-\u200dtools'),
+                              'c1 session': dict(session='x\x9by'),
                               'relative dir': dict(directory='relative'),
                               'file program': dict(argv=[str(self.project / 'nope'), '-c']),
                               'single operand': dict(argv=[str(self.shell)]),
@@ -275,6 +277,49 @@ class OpenTests(unittest.TestCase):
                               ('empty rmux', lambda: patch.dict(os.environ, {'RMUX': ''}))]:
             with self.subTest(label), change():
                 with self.assertRaises(store.StoreError): self.request()
+
+    def test_validate_names_the_session_from_session_words_and_keeps_hashes(self):
+        self.assertEqual(self.request(session='mux')[1], 'mux')
+        self.assertEqual(self.request(session='a.b:c')[1], 'a_b_c')
+        self.assertEqual(self.request(session='fix #{pid} #[bold]')[1], 'fix #{pid} #[bold]')
+        self.assertEqual(self.request(session='job;')[1], 'job;')
+        self.assertEqual(self.request(session='')[1], 'my_app')
+
+    def test_creation_only_rules_wait_for_a_missing_session(self):
+        hashed, slashed = self.home / 'work#1', self.home / 'w\\x'
+        for path in (hashed, slashed): path.mkdir()
+        # The lookup needs only the session name, so these pass validation.
+        for kwargs in (dict(directory=hashed, session='mux'), dict(directory=slashed, session='mux'),
+                       dict(name='a\\b', session='mux')):
+            with self.subTest(kwargs=kwargs):
+                request = self.request(**kwargs)
+                with patch.object(self.store, 'ensure_active', return_value=self.active), \
+                     patch.object(self.store, 'session_id', return_value='$2'), \
+                     patch.object(self.store, 'command') as command, patch.object(store.os, 'execve') as execute:
+                    self.store.open(*request)
+                    command.assert_not_called()
+                    self.assertEqual(execute.call_args.args[1][-3:], ['attach-session', '-t', '$2'])
+                with patch.object(self.store, 'ensure_active', return_value=self.active), \
+                     patch.object(self.store, 'session_id', return_value=None), \
+                     patch.object(self.store, 'command') as command, patch.object(store.os, 'execve') as execute:
+                    with self.assertRaises(store.StoreError): self.store.open(*request)
+                    command.assert_not_called()
+                    execute.assert_not_called()
+        # With no server, nothing exists to attach to, so the same rules refuse before the daemon starts.
+        with patch.object(self.store, 'ensure_active', return_value=dict(self.active, server=None)), \
+             patch.object(self.store, 'command') as command, patch.object(store.os, 'execve') as execute:
+            with self.assertRaises(store.StoreError): self.store.open(*self.request(hashed, session='mux'))
+            command.assert_not_called()
+            execute.assert_not_called()
+
+    def test_restore_and_bootstrap_escape_a_trailing_semicolon(self):
+        with patch.object(self.store, 'command', return_value='$1|@1|%1') as command, \
+             patch.object(self.store, 'wait_ppid1'):
+            self.store.bootstrap(self.runtime, 'job;', cwd='/w/p;', window_name='w;')
+            args = command.call_args.args[1]
+            self.assertEqual(args[args.index('-s') + 1], 'job\\;')
+            self.assertEqual(args[args.index('-c') + 1], '/w/p\\;')
+            self.assertEqual(args[args.index('-n') + 1], 'w\\;')
 
     def test_session_lookup_matches_reported_unicode_names(self):
         runtime = {'hash': 'h', 'path': str(self.bin), 'files': {}}
@@ -320,22 +365,29 @@ class OpenTests(unittest.TestCase):
             self.assertEqual(args[-len(self.argv):], self.argv[:-1] + ['x #{y}\;'])
             self.assertEqual(execute.call_args.args[1][-1], '$4:@8')
 
-    def test_open_with_session_adds_window_and_targets_it(self):
+    def test_open_with_session_attaches_it_as_is(self):
         with patch.object(self.store, 'ensure_active', return_value=self.active), \
-             patch.object(self.store, 'session_id', return_value='$2'), \
-             patch.object(self.store, 'command', return_value='$2:@5') as command, \
+             patch.object(self.store, 'session_id', return_value='$2') as lookup, \
+             patch.object(self.store, 'command') as command, \
              patch.object(store.os, 'execve') as execute:
-            self.store.open(*self.request(name='w #{x}'))
-            command.assert_called_once_with(self.runtime, [
-                'new-window', '-d', '-P', '-F', '#{session_id}:#{window_id}', '-t', '$2:',
-                '-c', str(self.project), '-n', 'w #{x}'] + self.argv[:-1] + ['x #{y}\;'])
-            self.assertEqual(execute.call_args.args[1][-3:], ['attach-session', '-t', '$2:@5'])
+            self.store.open(*self.request(name='w #{x}', session='mux'))
+            lookup.assert_called_once_with(self.runtime, 'mux')
+            command.assert_not_called()
+            argv, env = execute.call_args.args[1:]
+            self.assertEqual(argv[-3:], ['attach-session', '-t', '$2'])
+            self.assertNotIn('RMUX', env)
 
     def test_open_refuses_malformed_target_and_protocol_errors(self):
         with patch.object(self.store, 'ensure_active', return_value=self.active), \
-             patch.object(self.store, 'session_id', return_value='$2'), \
-             patch.object(self.store, 'command', return_value='$2:@x'), patch.object(store.os, 'execve') as execute:
+             patch.object(self.store, 'session_id', return_value=None), \
+             patch.object(self.store, 'command', return_value='$2|@x|%1'), patch.object(store.os, 'execve') as execute:
             with self.assertRaises(store.StoreError): self.store.open(*self.request())
+            execute.assert_not_called()
+        with patch.object(self.store, 'ensure_active', return_value=self.active), \
+             patch.object(self.store, 'session_id', return_value='2'), \
+             patch.object(self.store, 'command') as command, patch.object(store.os, 'execve') as execute:
+            with self.assertRaises(store.StoreError): self.store.open(*self.request())
+            command.assert_not_called()
             execute.assert_not_called()
         with patch.object(self.store, 'ensure_active', side_effect=store.StoreError('protocol mismatch')), \
              patch.object(self.store, 'command') as command:
@@ -344,13 +396,18 @@ class OpenTests(unittest.TestCase):
 
     def test_cli_open_validates_before_store_and_names_the_opt_out(self):
         with patch('store.Store') as factory, patch('sys.stderr', new_callable=io.StringIO) as err:
-            self.assertEqual(store.main(['open', 'relative', 'n', str(self.shell), '-c']), 1)
+            self.assertEqual(store.main(['open', 'relative', 'n', '', str(self.shell), '-c']), 1)
             self.assertEqual(store.main(['open', str(self.project)]), 2)
+            self.assertEqual(store.main(['open', str(self.project), 'n', '', str(self.shell)]), 2)
             factory.assert_not_called()
-            self.assertEqual(err.getvalue().count('CC_GG_INLINE=1'), 2)
+            self.assertEqual(err.getvalue().count('CC_GG_INLINE=1'), 3)
+            self.assertIn('open DIR NAME SESSION PROGRAM ARG...', err.getvalue())
         with patch('store.Store') as factory:
-            self.assertEqual(store.main(['open', str(self.project), 'n'] + self.argv), 0)
+            self.assertEqual(store.main(['open', str(self.project), 'n', ''] + self.argv), 0)
             factory.return_value.open.assert_called_once_with(str(self.project), 'my_app', 'n', self.argv)
+        with patch('store.Store') as factory:
+            self.assertEqual(store.main(['open', str(self.project), 'n', 'mux'] + self.argv), 0)
+            factory.return_value.open.assert_called_once_with(str(self.project), 'mux', 'n', self.argv)
 
 
 @unittest.skipUnless(os.environ.get('RMUX_STORE_INTEGRATION') == '1' and Path('/opt/homebrew/bin/rmux').exists(), 'opt-in disposable runtime test')
@@ -404,6 +461,37 @@ class RuntimeTests(unittest.TestCase):
                     self.assertEqual(store.structural(manager.capture(runtime)), store.structural(snapshot))
                 finally:
                     manager.run(runtime, ['kill-server'], no_start=True)
+
+    def test_open_attaches_an_existing_session_as_is_and_restores_semicolon_names(self):
+        with tempfile.TemporaryDirectory(prefix='rmux-store-open-') as root:
+            home = Path(root).resolve()
+            manager = store.Store(home=home, installed=Path('/opt/homebrew/bin/rmux'), socket=home / 'socket', config=Path('/dev/null'))
+            argv = ['/bin/sh', '-c', 'sleep 60']
+            try:
+                runtime = manager.prepare()['runtime']
+                with patch.object(store.os, 'execve') as execute:
+                    manager.open(str(home), 'job;', 'w;', argv)
+                created = execute.call_args.args[1][-1]
+                sid = created.split(':')[0]
+                self.assertEqual(manager.session_id(runtime, 'job;'), sid)
+                manager.command(runtime, ['new-window', '-t', sid + ':', '-n', 'mine', '-c', str(home)])
+                before = manager.json_command(runtime, ['list-windows', '-t', sid])
+                with patch.object(store.os, 'execve') as execute:
+                    manager.open(str(home), 'job;', 'second', argv)
+                self.assertEqual(execute.call_args.args[1][-3:], ['attach-session', '-t', sid])
+                self.assertEqual(manager.json_command(runtime, ['list-windows', '-t', sid]), before)
+                for name in ('fix #{pid}', 'hash#tag'):
+                    with patch.object(store.os, 'execve') as execute:
+                        manager.open(str(home), name, 't', argv)
+                    self.assertEqual(manager.session_id(runtime, name), execute.call_args.args[1][-1].split(':')[0])
+                snapshot = manager.capture(runtime)
+                self.assertIn('job;', [s['name'] for s in snapshot['sessions']])
+                manager.command(runtime, ['kill-server'])
+                manager.wait_absent(runtime)
+                manager.restore(runtime, snapshot)
+                self.assertEqual(store.structural(manager.capture(runtime)), store.structural(snapshot))
+            finally:
+                if 'runtime' in locals(): manager.run(runtime, ['kill-server'], no_start=True)
 
     def test_roundtrip_disposable_socket(self):
         with tempfile.TemporaryDirectory(prefix='rmux-store-runtime-') as root:

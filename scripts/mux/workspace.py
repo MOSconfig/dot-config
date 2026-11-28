@@ -34,22 +34,34 @@ def text(value, name=False):
 
 
 
-def session_slug(directory):
-    name = re.sub(r'[.:]', '_', os.path.basename(directory.rstrip('/'))) or 'root'
+def name_slug(words):
+    # A session name tmux and RMUX both keep exactly: '.' and ':' become '_', as does a leading '-'.
+    name = re.sub(r'[.:]', '_', words) or 'root'
     return '_' + name[1:] if name.startswith('-') else name
 
 
+def session_slug(directory):
+    return name_slug(os.path.basename(directory.rstrip('/')))
+
+
 def validate_open(args):
-    """Checks shared by tmux-store and rmux-store `open DIR NAME PROGRAM ARG...`, before any store work."""
-    require(len(args) >= 4, 'open requires DIR NAME PROGRAM ARG...')
-    directory, name, argv = args[0], args[1], list(args[2:])
+    """Checks shared by tmux-store and rmux-store `open DIR NAME SESSION PROGRAM ARG...`, before any store work.
+
+    SESSION names the session from cc/gg's words; empty means the folder's name."""
+    require(len(args) >= 5, 'open requires DIR NAME SESSION PROGRAM ARG...')
+    directory, name, words, argv = args[0], args[1], args[2], list(args[3:])
     require(os.isatty(0) and os.isatty(1), 'open needs a terminal on stdin and stdout')
     require('RMUX' not in os.environ, 'cannot open from inside RMUX; detach first')
     require(sys.platform == 'darwin', 'open supports macOS only')
     text(directory)
     require(os.path.isabs(directory) and os.path.isdir(directory) and os.access(directory, os.X_OK),
             'open DIR must be an absolute, searchable directory')
-    session = text(session_slug(directory), name=True)
+    session = text(name_slug(words) if words else session_slug(directory), name=True)
+    # C1 controls pass text() but would land in the session name the status bar and lookups show.
+    require(not any(0x80 <= ord(c) <= 0x9f for c in session), 'session name cannot contain control characters')
+    # A folder name is at most 255 bytes; longer typed words could read back (escaped) past text()'s
+    # limit and make the store's own session list unreadable.
+    require(len(session) <= 256, 'session name is longer than 256 characters')
     text(name)
     for item in argv:
         text(item)
