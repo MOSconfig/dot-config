@@ -17,7 +17,7 @@ import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'mux'))
 from workspace import (PrivateState, StoreError, digest, identifier, integer,
-                       make_snapshot, parse_layout, require, session_slug, structural, text,
+                       make_snapshot, name_slug, parse_layout, require, session_slug, structural, text,
                        validate_open as shared_validate_open, validate_snapshot)
 
 SESSION = {'session_name': 'text', 'session_id': '$', 'session_windows': 'int', 'session_grouped': 'flag'}
@@ -484,9 +484,8 @@ class Store(PrivateState):
             sid = self.session_id(runtime, session) if active['server'] else None
             client = self.calling_client(active) if native_context() else None
             if sid is not None:
-                target = self.command(runtime, [
-                    'new-window', '-d', '-P', '-F', '#{session_id}:#{window_id}', '-t', sid + ':',
-                    '-c', literal(directory), '-n', literal(name)] + command)
+                # A session of that name already runs: attach to it as it is, with no new agent window.
+                target = identifier(sid, '$')
             else:
                 if active['server'] is None:
                     output = self.bootstrap(runtime, session, cwd=directory, window_name=name, argv=command)
@@ -496,9 +495,7 @@ class Store(PrivateState):
                                                                     argv=command))
                 parts = output.split('|')
                 require(len(parts) == 3, 'created window was not reported')
-                target = parts[0] + ':' + parts[1]
-            sid, _, wid = target.partition(':')
-            target = identifier(sid, '$') + ':' + identifier(wid, '@')
+                target = identifier(parts[0], '$') + ':' + identifier(parts[1], '@')
         args = ['switch-client', '-c', client, '-t', target] if client else ['attach-session', '-t', target]
         argv = self.argv(runtime, args)
         os.execve(argv[0], argv, self.environment())
@@ -761,8 +758,9 @@ HELP = '''Native tmux helpers
   td NAME           Permanently stop the exact named session and its programs.
   ts                Confirm, save and restart ALL sessions on the selected socket.
   th                Show helper usage and upgrade steps.
-  cc / gg           Outside tmux on macOS: open in a folder-named session window
-                    (tmux-store open DIR NAME PROGRAM ARG...). CC_GG_INLINE=1 opts out.
+  cc / gg [words]   Outside tmux on macOS: open in the session the words name (else the
+                    folder), attaching as is when it already runs
+                    (tmux-store open DIR NAME SESSION PROGRAM ARG...). CC_GG_INLINE=1 opts out.
 
 Upgrade: brew upgrade tmux; then run ts when ready to stop running programs.
 The matching Homebrew Cellar executable is reused, NOT copied or retained.
@@ -791,8 +789,8 @@ def main(args=None):
     command = args[0] if args else 'help'
     arity = {'attach': 2, 'delete': 2, 'rename': 2, 'list': 1, 'restart': 1, 'help': 1}
     if command == 'open':
-        if len(args) < 5:
-            print('Usage: tmux-store open DIR NAME PROGRAM ARG...\n'
+        if len(args) < 6:
+            print('Usage: tmux-store open DIR NAME SESSION PROGRAM ARG...\n'
                   'Set CC_GG_INLINE=1 to run cc/gg without tmux.', file=sys.stderr)
             return 2
         try:
@@ -807,7 +805,7 @@ def main(args=None):
         return 0
     if (command not in arity and command not in ('client', '_worker') or
             command in arity and len(args) != arity[command]):
-        print('Usage: tmux-store {attach NAME|open DIR NAME PROGRAM ARG...|list|delete NAME|restart|help|rename TITLE|client ARGS...}', file=sys.stderr)
+        print('Usage: tmux-store {attach NAME|open DIR NAME SESSION PROGRAM ARG...|list|delete NAME|restart|help|rename TITLE|client ARGS...}', file=sys.stderr)
         return 2
     try:
         if command == '_worker':

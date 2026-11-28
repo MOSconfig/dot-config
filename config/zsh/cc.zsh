@@ -1,7 +1,9 @@
-# cc [title]
+# cc [words]
 #
-# On macOS outside tmux/RMUX with a terminal, opens a window in $PWD in native
-# tmux, else RMUX (see _mux_backend in zz-tmux.zsh); CC_GG_INLINE=1 opts out.
+# On macOS outside tmux/RMUX with a terminal, opens Claude Code in native tmux,
+# else RMUX (see _mux_backend in zz-tmux.zsh); CC_GG_INLINE=1 opts out. The
+# words name the session (none: the current folder's name). When that session
+# already runs, cc attaches to it as it is and starts no second Claude Code.
 #
 # Sibling of `gg` (config/zsh/gg.zsh) but launches Anthropic's
 # Claude Code CLI instead of GitHub Copilot CLI. Sets the active terminal
@@ -29,7 +31,10 @@ function cc {
   # Wrap in $'...' (zsh ANSI-C quoting) so the literal codepoint sits in
   # the title bytes.
   local icon=$''
-  local title_text="${*:-$PWD}"
+  # Words join with one space whatever the caller's IFS is, as _mux_open joins the session name.
+  local IFS=' '
+  local title_text="$*"
+  [[ -n "$title_text" ]] || title_text=$PWD
   local title="$icon $title_text"
   if (( $+functions[_mux_should_wrap] )) && _mux_should_wrap; then
     _mux_open cc "$title" "$@"

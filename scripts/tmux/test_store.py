@@ -564,8 +564,9 @@ class OpenTests(unittest.TestCase):
         self.server = {'pid': 42, 'socket': self.manager.socket, 'start': '100.000001', 'started': 100, 'version': '3.7c'}
         self.active = {'version': 1, 'runtime': self.runtime, 'server': self.server}
 
-    def request(self, directory=None, name='✨ title', argv=None):
-        return store.validate_open([str(directory or self.project), name] + (self.argv if argv is None else argv))
+    def request(self, directory=None, name='✨ title', argv=None, session=''):
+        return store.validate_open([str(directory or self.project), name, session] +
+                                   (self.argv if argv is None else argv))
 
     def test_session_slug_is_a_valid_exact_name(self):
         for path, name in [('/', 'root'), ('/w/my.app', 'my_app'), ('/w/a.b:c', 'a_b_c'),
@@ -573,6 +574,27 @@ class OpenTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(store.session_slug(path), name)
                 store.text(name, name=True)
+
+    def test_name_slug_applies_the_folder_rules_to_any_words(self):
+        for words, name in [('mux', 'mux'), ('fix login', 'fix login'), ('a.b:c', 'a_b_c'), ('-x', '_x'),
+                            ('.cfg', '_cfg'), ('/tmp/x', '/tmp/x'), ('hash#tag', 'hash#tag'), ('', 'root')]:
+            with self.subTest(words=words):
+                self.assertEqual(store.name_slug(words), name)
+        self.assertEqual(store.session_slug('/w/my.app'), store.name_slug('my.app'))
+
+    def test_validate_open_names_the_session_from_session_words(self):
+        self.assertEqual(self.request(session='mux')[1], 'mux')
+        self.assertEqual(self.request(session='fix login')[1], 'fix login')
+        self.assertEqual(self.request(session='a.b:c')[1], 'a_b_c')
+        self.assertEqual(self.request(session='-x')[1], '_x')
+        self.assertEqual(self.request(session='')[1], 'my_app')
+        self.assertEqual(self.request(session='mux')[2], '✨ title')
+
+    def test_validate_open_refuses_control_characters_in_the_session(self):
+        for words in ('a\tb', 'a\nb', 'x\x7fy', 'x\x9by', 'x\x80y'):
+            with self.subTest(words=repr(words)), patch.object(store, 'Store') as factory:
+                with self.assertRaises(store.StoreError): self.request(session=words)
+                factory.assert_not_called()
 
     def test_argv_items_keep_hashes_and_escape_only_a_trailing_semicolon(self):
         self.assertEqual(store.argv_literal('#{pane_id} a;b'), '#{pane_id} a;b')
@@ -606,6 +628,7 @@ class OpenTests(unittest.TestCase):
             'unsearchable dir': dict(directory=locked),
             'unrepresentable dir': dict(directory=nested),
             'empty name': dict(name=''),
+            'control session': dict(session='a\x1bb'),
             'control name': dict(name='a\tb'),
             'single operand': dict(argv=[str(self.shell)]),
             'relative program': dict(argv=['zsh', '-lic', 'cc']),
@@ -660,46 +683,62 @@ class OpenTests(unittest.TestCase):
             self.assertEqual(args[-len(self.argv):], self.argv[:-1] + ['x #{y}\\;'])
             self.assertEqual(execute.call_args.args[1][-1], '$4:@8')
 
-    def test_open_with_session_adds_window_and_targets_it(self):
+    def test_open_with_session_attaches_it_as_is(self):
         with patch.object(self.manager, 'ensure_active', return_value=self.active), \
-             patch.object(self.manager, 'session_id', return_value='$2'), \
-             patch.object(self.manager, 'command', return_value='$2:@5') as command, \
+             patch.object(self.manager, 'session_id', return_value='$2') as lookup, \
+             patch.object(self.manager, 'command') as command, \
              patch.object(store.os, 'execve') as execute:
-            self.manager.open(*self.request(name='w #{x};'))
-            command.assert_called_once_with(self.runtime, [
-                'new-window', '-d', '-P', '-F', '#{session_id}:#{window_id}', '-t', '$2:',
-                '-c', str(self.project), '-n', 'w ##{x}\\;'] + self.argv[:-1] + ['x #{y}\\;'])
-            self.assertEqual(execute.call_args.args[1][-3:], ['attach-session', '-t', '$2:@5'])
+            self.manager.open(*self.request(name='w #{x};', session='mux'))
+            lookup.assert_called_once_with(self.runtime, 'mux')
+            command.assert_not_called()
+            argv, env = execute.call_args.args[1:]
+            self.assertEqual(argv[-3:], ['attach-session', '-t', '$2'])
+            self.assertNotIn('TMUX', env)
 
     def test_open_refuses_malformed_created_target(self):
         with patch.object(self.manager, 'ensure_active', return_value=self.active), \
-             patch.object(self.manager, 'session_id', return_value='$2'), \
-             patch.object(self.manager, 'command', return_value='$2:@x'), patch.object(store.os, 'execve') as execute:
+             patch.object(self.manager, 'session_id', return_value=None), \
+             patch.object(self.manager, 'command', return_value='$2|@x|%1'), patch.object(store.os, 'execve') as execute:
             with self.assertRaises(store.StoreError): self.manager.open(*self.request())
             execute.assert_not_called()
 
-    def test_native_open_switches_calling_client(self):
+    def test_open_refuses_malformed_existing_session_id(self):
+        with patch.object(self.manager, 'ensure_active', return_value=self.active), \
+             patch.object(self.manager, 'session_id', return_value='2'), \
+             patch.object(self.manager, 'command') as command, patch.object(store.os, 'execve') as execute:
+            with self.assertRaises(store.StoreError): self.manager.open(*self.request())
+            command.assert_not_called()
+            execute.assert_not_called()
+
+    def test_native_open_switches_calling_client_to_the_existing_session(self):
         with patch.dict(os.environ, {'TMUX': self.manager.socket + ',42,1', 'TMUX_PANE': '%3'}), \
              patch.object(self.manager, 'ensure_active', return_value=self.active), \
              patch.object(self.manager, 'session_id', return_value='$2'), \
-             patch.object(self.manager, 'command', return_value='$2:@5'), \
+             patch.object(self.manager, 'command') as command, \
              patch.object(self.manager, 'calling_client', return_value='/dev/ttys123'), \
              patch.object(store.os, 'execve') as execute:
             self.manager.open(str(self.project), 'my_app', 'n', self.argv)
-            self.assertEqual(execute.call_args.args[1][-5:], ['switch-client', '-c', '/dev/ttys123', '-t', '$2:@5'])
+            command.assert_not_called()
+            self.assertEqual(execute.call_args.args[1][-5:], ['switch-client', '-c', '/dev/ttys123', '-t', '$2'])
 
     def test_cli_open_validates_before_constructing_store(self):
         with patch.object(store, 'Store') as factory, patch('sys.stderr', new_callable=io.StringIO) as err:
-            self.assertEqual(store.main(['open', 'relative', 'n', str(self.shell), '-c']), 1)
+            self.assertEqual(store.main(['open', 'relative', 'n', '', str(self.shell), '-c']), 1)
             factory.assert_not_called()
             self.assertIn('CC_GG_INLINE=1', err.getvalue())
-        with patch.object(store, 'Store') as factory, patch('sys.stderr', new_callable=io.StringIO) as err:
-            self.assertEqual(store.main(['open', str(self.project)]), 2)
-            factory.assert_not_called()
-            self.assertIn('CC_GG_INLINE=1', err.getvalue())
+        for short in (['open', str(self.project)], ['open', str(self.project), 'n', '', str(self.shell)]):
+            with self.subTest(args=short), patch.object(store, 'Store') as factory, \
+                 patch('sys.stderr', new_callable=io.StringIO) as err:
+                self.assertEqual(store.main(short), 2)
+                factory.assert_not_called()
+                self.assertIn('open DIR NAME SESSION PROGRAM ARG...', err.getvalue())
+                self.assertIn('CC_GG_INLINE=1', err.getvalue())
         with patch.object(store, 'Store') as factory:
-            self.assertEqual(store.main(['open', str(self.project), 'n'] + self.argv), 0)
+            self.assertEqual(store.main(['open', str(self.project), 'n', ''] + self.argv), 0)
             factory.return_value.open.assert_called_once_with(str(self.project), 'my_app', 'n', self.argv)
+        with patch.object(store, 'Store') as factory:
+            self.assertEqual(store.main(['open', str(self.project), 'n', 'mux'] + self.argv), 0)
+            factory.return_value.open.assert_called_once_with(str(self.project), 'mux', 'n', self.argv)
 
     def test_wrapper_ignores_current_directory_modules(self):
         (self.project / 'json.py').write_text('raise SystemExit("shadowed")\n')
@@ -732,23 +771,41 @@ class RuntimeTests(unittest.TestCase):
         self.addCleanup(shell.stop)
         self.addCleanup(lambda: self.manager.run(self.runtime, ['kill-server']))
 
-    def test_private_open_runs_argv_in_directory_then_adds_window(self):
+    def test_private_open_runs_argv_in_directory_then_attaches_as_is(self):
         project = self.home / 'proj.x'
         project.mkdir()
         marker = self.home / 'marker'
         argv = ['/bin/sh', '-c', 'pwd >> "$1"; printf "%s\\n" "$2" >> "$1"; sleep 30', 'sh', str(marker), 'a #{b};']
         with patch.object(store.os, 'execve') as execute:
             self.manager.open(str(project), 'proj_x', 'w #{n};', argv)
+        first = execute.call_args.args[1][-1]
+        sid = first.split(':')[0]
+        # A second window the person selected: reuse must keep both and the selection.
+        self.manager.command(self.runtime, ['new-window', '-t', sid + ':', '-n', 'mine', '-c', str(project)])
+        before = self.manager.query(self.runtime, ['list-windows', '-t', sid], store.WINDOW)
+        with patch.object(store.os, 'execve') as execute:
             self.manager.open(str(project), 'proj_x', 'second', argv[:5] + ['two'])
-        first, second = (call.args[1][-1] for call in execute.call_args_list)
-        windows = self.manager.query(self.runtime, ['list-windows', '-t', '=proj_x'], store.WINDOW)
-        self.assertEqual([w['window_name'] for w in windows], ['w #{n};', 'second'])
-        self.assertEqual(first.split(':')[0], second.split(':')[0])
+        self.assertEqual(execute.call_args.args[1][-3:], ['attach-session', '-t', sid])
+        after = self.manager.query(self.runtime, ['list-windows', '-t', sid], store.WINDOW)
+        self.assertEqual(after, before)
+        self.assertEqual([(w['window_name'], w['window_active']) for w in after],
+                         [('w #{n};', False), ('mine', True)])
         for _ in range(100):
-            if marker.exists() and len(marker.read_text().splitlines()) >= 4: break
+            if marker.exists() and len(marker.read_text().splitlines()) >= 2: break
             store.time.sleep(.05)
-        lines = marker.read_text().splitlines()
-        self.assertEqual(sorted(lines), sorted([str(project), 'a #{b};', str(project), 'two']))
+        store.time.sleep(.2)
+        self.assertEqual(marker.read_text().splitlines(), [str(project), 'a #{b};'])
+
+    def test_private_named_session_with_hash_and_backslash_round_trips(self):
+        project = self.home / 'proj'
+        project.mkdir()
+        argv = ['/bin/sh', '-c', 'sleep 30']
+        for name in ('fix #{pid} #[bold]', 'a\\b', 'two words'):
+            with self.subTest(name=name), patch.object(store.os, 'execve') as execute:
+                self.manager.open(str(project), name, 't', argv)
+                created = execute.call_args.args[1][-1].split(':')[0]
+                self.manager.open(str(project), name, 't', argv)
+                self.assertEqual(execute.call_args.args[1][-3:], ['attach-session', '-t', created])
 
     def test_private_first_launch_creates_owned_socket_directory(self):
         socket = self.home / 'new' / 'sock'

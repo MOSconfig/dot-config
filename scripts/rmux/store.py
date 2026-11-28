@@ -29,13 +29,20 @@ def rmux_arg(value):
 
 
 def validate_rmux_open(args):
+    # Only the session name decides whether it can be found, so only its rules come before the lookup.
     request = validate_open(args)
-    # RMUX 0.10 (probed): -c expands '##'/'#{' but breaks if '#[' is doubled; -s and rename double '\'.
-    require('#' not in request[0] and '\\' not in request[0], 'RMUX open DIR cannot contain # or \\')
-    require('\\' not in request[2], 'RMUX open NAME cannot contain \\')
+    # RMUX 0.10 (probed): -s doubles '\', so such a session could never be found again; '#' stays literal.
+    require('\\' not in request[1], 'RMUX session name cannot contain \\')
     # RMUX reports non-printable name characters (e.g. U+200D) octal-escaped, so reuse would miss.
     require(request[1].isprintable(), 'RMUX open session name must be printable')
     return request
+
+
+def require_rmux_create(directory, name):
+    # Creating a window also sends DIR and NAME; attaching to a running session sends neither.
+    # RMUX 0.10 (probed): -c expands '##'/'#{' but breaks if '#[' is doubled; rename doubles '\'.
+    require('#' not in directory and '\\' not in directory, 'RMUX open DIR cannot contain # or \\')
+    require('\\' not in name, 'RMUX open NAME cannot contain \\')
 
 
 class Store(PrivateState):
@@ -212,12 +219,13 @@ class Store(PrivateState):
         return matches[0] if matches else None
 
     def bootstrap(self, runtime, name, width=80, height=24, cwd=None, window_name=None):
-        args = ['new-session', '-d', '-P', '-F', '#{session_id}|#{window_id}|#{pane_id}', '-s', name,
+        # A name or folder ending in ';' would split the command, as RMUX reads it as a separator.
+        args = ['new-session', '-d', '-P', '-F', '#{session_id}|#{window_id}|#{pane_id}', '-s', rmux_arg(name),
                 '-x', str(width), '-y', str(height)]
         if cwd:
-            args += ['-c', cwd]
+            args += ['-c', rmux_arg(cwd)]
         if window_name:
-            args += ['-n', window_name]
+            args += ['-n', rmux_arg(window_name)]
         output = self.command(runtime, args, no_start=False)
         self.wait_ppid1(runtime)
         return output
@@ -255,15 +263,16 @@ class Store(PrivateState):
 
     def open(self, directory, session, name, argv):
         command = [rmux_arg(item) for item in argv]
-        place = ['-c', rmux_arg(directory), '-n', rmux_arg(name)]
         with self.lock():
             active = self.ensure_active()
             runtime = active['runtime']
             sid = self.session_id(runtime, session) if active['server'] else None
             if sid is not None:
-                target = self.command(runtime, ['new-window', '-d', '-P', '-F', '#{session_id}:#{window_id}',
-                                                '-t', sid + ':'] + place + command)
+                # A session of that name already runs: attach to it as it is, with no new agent window.
+                target = identifier(sid, '$')
             else:
+                require_rmux_create(directory, name)
+                place = ['-c', rmux_arg(directory), '-n', rmux_arg(name)]
                 args = ['new-session', '-d', '-P', '-F', '#{session_id}|#{window_id}|#{pane_id}',
                         '-s', rmux_arg(session), '-x', '80', '-y', '24'] + place + command
                 if active['server'] is None:
@@ -274,9 +283,7 @@ class Store(PrivateState):
                     output = self.command(runtime, args)
                 parts = output.split('|')
                 require(len(parts) == 3, 'created window was not reported')
-                target = parts[0] + ':' + parts[1]
-            sid, _, wid = target.partition(':')
-            target = identifier(sid, '$') + ':' + identifier(wid, '@')
+                target = identifier(parts[0], '$') + ':' + identifier(parts[1], '@')
         argv = self.argv(runtime, ['attach-session', '-t', target])
         os.execve(argv[0], argv, self.environment())
 
@@ -367,8 +374,8 @@ class Store(PrivateState):
                 pane_base = window['panes'][0]['index']
                 if wi == 0:
                     args = ['new-session', '-d', '-P', '-F', '#{session_id}|#{window_id}|#{pane_id}',
-                            '-s', session['name'], '-n', window['name'], '-x', str(window['width']),
-                            '-y', str(window['height']), '-c', window['panes'][0]['cwd']]
+                            '-s', rmux_arg(session['name']), '-n', rmux_arg(window['name']), '-x', str(window['width']),
+                            '-y', str(window['height']), '-c', rmux_arg(window['panes'][0]['cwd'])]
                     if first_server:
                         ids = self.bootstrap(runtime, session['name'], window['width'], window['height'],
                                              window['panes'][0]['cwd'], window['name'])
@@ -385,7 +392,8 @@ class Store(PrivateState):
                         self.command(runtime, ['move-window', '-s', wid, '-t', f"{sid}:{window['index']}"])
                 else:
                     ids = self.command(runtime, ['new-window', '-d', '-P', '-F', '#{window_id}|#{pane_id}',
-                                                '-t', f"{sid}:{window['index']}", '-n', window['name'], '-c', window['panes'][0]['cwd']])
+                                                '-t', f"{sid}:{window['index']}", '-n', rmux_arg(window['name']),
+                                                '-c', rmux_arg(window['panes'][0]['cwd'])])
                     parts = ids.split('|')
                     require(len(parts) == 2, 'missing fresh window IDs')
                     wid, pid = identifier(parts[0], '@'), identifier(parts[1], '%')
@@ -396,7 +404,7 @@ class Store(PrivateState):
                 for index, pane in enumerate(window['panes'][1:], 1):
                     remaining_width = max(window['width'], count * 4) - index * 3
                     pid = self.command(runtime, ['split-window', '-d', '-h', '-P', '-F', '#{pane_id}',
-                                                 '-t', fresh_panes[-1], '-l', str(remaining_width), '-c', pane['cwd']])
+                                                 '-t', fresh_panes[-1], '-l', str(remaining_width), '-c', rmux_arg(pane['cwd'])])
                     fresh_panes.append(identifier(pid, '%'))
                 self.command(runtime, ['resize-window', '-t', wid, '-x', str(window['width']), '-y', str(window['height'])])
                 self.command(runtime, ['select-layout', '-t', wid, window['layout']])
@@ -527,8 +535,9 @@ HELP = '''RMUX helpers
   rd NAME       Permanently stop the exact named session and its programs.
   rs            Save and restart ALL sessions using the installed runtime.
   rh            Show helper usage, parent PID, and upgrade steps.
-  cc / gg       macOS fallback when native tmux is unavailable: open in a folder-named
-                session window (rmux-store open DIR NAME PROGRAM ARG...). CC_GG_INLINE=1 opts out.
+  cc / gg       macOS fallback when native tmux is unavailable: open in the session the
+  [words]       words name (else the folder), attaching as is when it already runs
+                (rmux-store open DIR NAME SESSION PROGRAM ARG...). CC_GG_INLINE=1 opts out.
 
 Upgrade: brew upgrade rmux
 When ready to stop running programs: rs
@@ -557,8 +566,8 @@ def main(args=None):
     arity = {'rr': 2, 'rl': 1, 'rd': 2, 'prepare': 1, 'restart': 1, 'help': 1}
     if command == 'open':
         hint = 'Set CC_GG_INLINE=1 to run cc/gg without a multiplexer.'
-        if len(args) < 5:
-            print('Usage: rmux-store open DIR NAME PROGRAM ARG...\n' + hint, file=sys.stderr)
+        if len(args) < 6:
+            print('Usage: rmux-store open DIR NAME SESSION PROGRAM ARG...\n' + hint, file=sys.stderr)
             return 2
         try:
             request = validate_rmux_open(args[1:])
@@ -571,7 +580,7 @@ def main(args=None):
         print(HELP)
         return 0
     if command not in arity and command not in ('client', '_worker') or command in arity and len(args) != arity[command]:
-        print('Usage: rmux-store {rr NAME|rl|rd NAME|open DIR NAME PROGRAM ARG...|client ARGS...|prepare|restart|help}', file=sys.stderr)
+        print('Usage: rmux-store {rr NAME|rl|rd NAME|open DIR NAME SESSION PROGRAM ARG...|client ARGS...|prepare|restart|help}', file=sys.stderr)
         return 2
     try:
         if command == '_worker':

@@ -230,8 +230,25 @@ sys.exit(int(os.environ.get('STUB_STATUS', '0')))
                     self.assertTrue(stdin_tty and stdout_tty)
                     self.assertEqual(args[:2], ['open', str(ROOT)])
                     self.assertTrue(args[2].endswith(' two words #{x} end;'))
-                    self.assertEqual(args[3:5], [str(self.zsh), '-lic'])
-                    self.assertEqual(args[6:], [str(self.zsh), launcher, 'two words', '#{x} end;'])
+                    self.assertEqual(args[3], 'two words #{x} end;')
+                    self.assertEqual(args[4:6], [str(self.zsh), '-lic'])
+                    self.assertEqual(args[7:], [str(self.zsh), launcher, 'two words', '#{x} end;'])
+
+    def test_session_words_join_with_one_space_whatever_ifs_is(self):
+        for launcher in ('cc', 'gg'):
+            for extra, words, session, title in (
+                    ('', 'mux', 'mux', ' mux'),
+                    ('IFS=:; ', 'fix login', 'fix login', ' fix login'),
+                    ('', '', '', ' ' + str(ROOT))):
+                with self.subTest(launcher=launcher, extra=extra, words=words):
+                    self.capture.unlink(missing_ok=True)
+                    code = (SOURCE + LAUNCHERS + self.prelude + extra +
+                            f'{launcher} {words}; print -r -- $? > {shlex.quote(str(self.status))}')
+                    self.pty(code)
+                    args = self.calls()[0][1]
+                    self.assertEqual(args[3], session)
+                    self.assertTrue(args[2].endswith(title), args[2])
+                    self.assertEqual(args[7:], [str(self.zsh), launcher] + words.split())
 
     def test_guards_keep_the_inline_launch(self):
         cases = {
@@ -280,8 +297,9 @@ sys.exit(int(os.environ.get('STUB_STATUS', '0')))
                     args = calls[0][1]
                     self.assertTrue(calls[0][2] and calls[0][3])
                     self.assertEqual(args[:2], ['open', str(ROOT)])
-                    self.assertEqual(args[3:5], [str(self.zsh), '-lic'])
-                    self.assertEqual(args[6:], [str(self.zsh), launcher, 'two words', '#{x} end;'])
+                    self.assertEqual(args[3], 'two words #{x} end;')
+                    self.assertEqual(args[4:6], [str(self.zsh), '-lic'])
+                    self.assertEqual(args[7:], [str(self.zsh), launcher, 'two words', '#{x} end;'])
 
     def test_open_never_falls_back_to_a_backend_the_guard_did_not_pick(self):
         code = (SOURCE + LAUNCHERS + self.prelude + '_mux_backend() { return 1; }; '
@@ -328,7 +346,7 @@ sys.exit(int(os.environ.get('STUB_STATUS', '0')))
         zdot.mkdir(exist_ok=True)
         rc = ''.join(f'source {ROOT}/config/zsh/{name}\n' for name in ('cc.zsh', 'gg.zsh', 'zz-rmux.zsh', 'zz-tmux.zsh'))
         (zdot / '.zshrc').write_text(f'PROMPT="READY> "; export PATH={shlex.quote(str(self.bin))}:$PATH\n' + rc)
-        inner = ' '.join(shlex.quote(arg) for arg in args[3:])
+        inner = ' '.join(shlex.quote(arg) for arg in args[4:])
         output = self.pty(f'cd {shlex.quote(str(ROOT))} && exec {inner}',
                           send=[('READY> ', 'print -r -- $((17*19))\n'), ('323', 'builtin exit\n')],
                           ZDOTDIR=str(zdot), RMUX='/tmp/rmux,1,0', RMUX_PANE='%1', TMUX='/tmp/rmux,1,0')
@@ -360,7 +378,7 @@ sys.exit(int(os.environ.get('STUB_STATUS', '0')))
         zdot = self.home / 'zdot'
         zdot.mkdir(exist_ok=True)
         (zdot / '.zshrc').write_text(f'PROMPT="READY> "; export PATH={shlex.quote(str(self.bin))}:$PATH\n' + zshrc)
-        inner = ' '.join(shlex.quote(arg) for arg in args[3:])
+        inner = ' '.join(shlex.quote(arg) for arg in args[4:])
         return self.pty(f'cd {shlex.quote(str(ROOT))} && exec {inner}',
                         send=[('READY> ', 'print -r -- $((17*19))\n'), ('323', 'builtin exit\n')],
                         ZDOTDIR=str(zdot), TMUX='/tmp/native,1,0', TMUX_PANE='%1')
