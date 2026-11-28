@@ -178,7 +178,7 @@ source ~/.oh-my-zsh/custom/cc.zsh
 Claude 与 Copilot 状态栏共享两行设计、本机生成的 Apollo 颜色和每目录五秒 Git cache。最上面是一行留白，然后是：
 
 1. 模型、effort、WakaTime、venv，最后是 context（十格进度条、百分比和容量，例如 `45% of 1.0M`）
-2. 先是 branch 及其标记（✓ 干净或 ● 有修改、领先/落后，有 stash 时显示 stash 图标和数量），然后是 btw（mermaid-tty 在本会话中回答 `/btw` 期间显示 `answering Ns`），然后是 Diff（本会话绿色的 `+新增` 和红色的 `-删除`，只显示非零部分，两者都为 0 时隐藏），文件夹路径在行的最右端
+2. 先是 branch 及其标记（✓ 干净或 ● 有修改、领先/落后，有 stash 时显示 stash 图标和数量），然后是 Diff（本会话绿色的 `+新增` 和红色的 `-删除`，只显示非零部分，两者都为 0 时隐藏），然后是 btw（mermaid-tty 在本会话中回答 `/btw` 期间显示 `answering Ns`），文件夹路径在行的最右端
 
 每一项都是带强调色的 Nerd Font 图标、弱化的标签和值；项之间用细竖线分隔，没有数据的项会隐藏。已知 `COLUMNS` 时，路径右对齐，并从左侧缩短（`…/`）以适应宽度；否则路径跟在其他项后面。`CLAUDE_STATUSLINE_PAD_TOP` 设置留白行数（默认 1）。
 

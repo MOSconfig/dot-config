@@ -49,8 +49,9 @@ run_statusline_smoke() {
 # The btw item reads mermaid-tty's per-session marker. Each status line runs
 # in a fixture repo on a neutral branch, with its caches in the fixture and a
 # fixed clock, so neither the branch nor the path can hold the words checked
-# and ages are exact; line 2 must read branch, btw with its age, then Diff,
-# in that order. A 299 s marker shows; the item hides for one 300 s old, empty,
+# and ages are exact; with the default segments, line 2 must read branch,
+# Diff, btw with its age, then Path: after the rule with no COLUMNS, and
+# right-aligned and shortened at 80 columns. A 299 s marker shows; the item hides for one 300 s old, empty,
 # padded, two-line or holding a NUL; for another session's; for a nested
 # session_id or one a brace inside a string or a newline in another field
 # could fake; an escaped key, an invalid id beside an alias, and an id that
@@ -77,11 +78,14 @@ run_statusline_btw_smoke() (
   marker="$home/.cache/mermaid-tty/btw-$id"
   here="$PWD"
 
+  # $3 is COLUMNS; empty means unknown. Copilot's segment override is cleared
+  # so its default list renders.
   btw_render() {
     printf '%s' "$2" | (cd "$repo" && HOME="$home" TMPDIR="$root/tmp/" PATH="$bin:$PATH" BTW_NOW="$now" \
-      LC_ALL=en_US.UTF-8 CLAUDE_STATUSLINE_NO_COLOR=1 \
+      LC_ALL=en_US.UTF-8 COLUMNS="${3:-}" COPILOT_STATUSLINE_SEGMENTS= CLAUDE_STATUSLINE_NO_COLOR=1 \
       COPILOT_STATUSLINE_NO_COLOR=1 CLAUDE_STATUSLINE_NO_ICONS=1 COPILOT_STATUSLINE_NO_ICONS=1 \
-      CLAUDE_STATUSLINE_PAD_TOP=0 COPILOT_STATUSLINE_PAD_TOP=0 bash "$here/$1")
+      CLAUDE_STATUSLINE_PAD_TOP=0 COPILOT_STATUSLINE_PAD_TOP=0 CLAUDE_STATUSLINE_PAD_LEFT=0 \
+      COPILOT_STATUSLINE_PAD_LEFT=0 CLAUDE_STATUSLINE_PAD_RIGHT=0 COPILOT_STATUSLINE_PAD_RIGHT=0 bash "$here/$1")
   }
   btw_hidden() {
     local out
@@ -97,16 +101,20 @@ run_statusline_btw_smoke() (
     touch -t "$stamp" "$marker"
   }
 
-  # A model fills line 1 and a diff follows btw, so line 2's order is checked.
+  # A model fills line 1 and btw follows a diff, so line 2's whole order is
+  # checked. At 80 columns the 48-column left part leaves 18 for the path, so
+  # it shortens to …/repo, right-aligned 15 spaces on, six columns from the end.
   full="{\"session_id\":\"$id\",\"model\":{\"display_name\":\"Opus\"},\"cost\":{\"total_lines_added\":3}}"
+  left="Branch plain clean │ Diff +3 │ btw answering 42s"
   for script in config/claude/statusline.sh config/copilot/statusline.sh; do
     printf '1' >"$marker"
     btw_aged 42
     line2="$(btw_render "$script" "$full" | sed -n 2p)"
-    case "$line2" in
-      "Branch plain clean │ btw answering 42s │ Diff +3"*) ;;
-      *) echo "$script: line 2 should be branch, btw answering ~42s, then Diff: $line2" >&2; exit 1 ;;
-    esac
+    [ "$line2" = "$left │ Path $repo" ] ||
+      { echo "$script: line 2 should be branch, Diff, btw answering 42s, then Path: $line2" >&2; exit 1; }
+    line2="$(btw_render "$script" "$full" 80 | sed -n 2p)"
+    [ "$line2" = "$left$(printf '%15s' '')Path …/repo" ] ||
+      { echo "$script: at 80 columns line 2 should end with a right-aligned …/repo: $line2" >&2; exit 1; }
 
     printf '1\n' >"$marker"
     btw_aged 299
