@@ -59,6 +59,9 @@ def validate_open(args):
     session = text(name_slug(words) if words else session_slug(directory), name=True)
     # C1 controls pass text() but would land in the session name the status bar and lookups show.
     require(not any(0x80 <= ord(c) <= 0x9f for c in session), 'session name cannot contain control characters')
+    # A folder name is at most 255 bytes; longer typed words could read back (escaped) past text()'s
+    # limit and make the store's own session list unreadable.
+    require(len(session) <= 256, 'session name is longer than 256 characters')
     text(name)
     for item in argv:
         text(item)

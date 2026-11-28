@@ -261,7 +261,9 @@ class Store(PrivateState):
         return runtime
 
     def argv(self, runtime, args, no_start=True):
-        command = [runtime['path'], '-S', self.socket]
+        # -u: names are UTF-8 whatever the locale; under LC_ALL=C tmux would print '_' for each
+        # byte and the length-prefixed records could no longer be read.
+        command = [runtime['path'], '-u', '-S', self.socket]
         if self.config is not None:
             command += ['-f', self.config]
         if no_start:

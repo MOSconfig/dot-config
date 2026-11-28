@@ -143,6 +143,8 @@ class StoreTests(unittest.TestCase):
             argv = self.manager.argv(self.runtime, ['list-sessions'])
             self.assertEqual(argv[0], str(self.binary))
             self.assertIn('-N', argv)
+            # -u: tmux reports names as UTF-8 even under LC_ALL=C, so a Unicode name stays readable.
+            self.assertEqual(argv[1], '-u')
             self.assertEqual(argv[argv.index('-S') + 1], self.manager.socket)
             default = store.Store(home=self.home, socket=self.home / 'second')
             self.assertIn(str(default.installed), ('/opt/homebrew/bin/tmux', '/usr/local/bin/tmux'))
@@ -590,6 +592,13 @@ class OpenTests(unittest.TestCase):
         self.assertEqual(self.request(session='')[1], 'my_app')
         self.assertEqual(self.request(session='mux')[2], '✨ title')
 
+    def test_validate_open_caps_the_session_name_so_it_reads_back(self):
+        self.assertEqual(self.request(session='a' * 256)[1], 'a' * 256)
+        for words in ('a' * 257, '\\' * 8193):
+            with self.subTest(length=len(words)), patch.object(store, 'Store') as factory:
+                with self.assertRaises(store.StoreError): self.request(session=words)
+                factory.assert_not_called()
+
     def test_validate_open_refuses_control_characters_in_the_session(self):
         for words in ('a\tb', 'a\nb', 'x\x7fy', 'x\x9by', 'x\x80y'):
             with self.subTest(words=repr(words)), patch.object(store, 'Store') as factory:
@@ -795,6 +804,18 @@ class RuntimeTests(unittest.TestCase):
             store.time.sleep(.05)
         store.time.sleep(.2)
         self.assertEqual(marker.read_text().splitlines(), [str(project), 'a #{b};'])
+
+    def test_private_unicode_session_reattaches_under_the_c_locale(self):
+        project = self.home / 'proj'
+        project.mkdir()
+        with patch.dict(os.environ, {'LC_ALL': 'C', 'LANG': 'C'}):
+            with patch.object(store.os, 'execve') as execute:
+                self.manager.open(str(project), '日本', 't', ['/bin/sh', '-c', 'sleep 30'])
+            created = execute.call_args.args[1][-1].split(':')[0]
+            with patch.object(store.os, 'execve') as execute:
+                self.manager.open(str(project), '日本', 't', ['/bin/sh', '-c', 'sleep 30'])
+            self.assertEqual(execute.call_args.args[1][-3:], ['attach-session', '-t', created])
+            self.assertEqual(self.manager.session_id(self.runtime, '日本'), created)
 
     def test_private_named_session_with_hash_and_backslash_round_trips(self):
         project = self.home / 'proj'
