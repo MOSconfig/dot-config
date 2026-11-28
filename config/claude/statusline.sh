@@ -23,11 +23,11 @@
 #       green/yellow/red, and the capacity, e.g. "45% of 1.0M".
 #   L2: Branch (orange) with its indicators (✓ clean or ● dirty, aqua
 #       ahead/behind, and a purple stash icon with the count only when
-#       there are stashes), then btw (yellow): "answering Ns" while
-#       mermaid-tty answers a /btw in this session (its marker,
-#       ~/.cache/mermaid-tty/btw-<session_id>, is 1 and under 300 s old),
-#       then Diff (blue): this session's +added in green
+#       there are stashes), then Diff (blue): this session's +added in green
 #       and -removed in red, nonzero parts only, hidden when both are 0;
+#       then btw (yellow): "answering Ns" while mermaid-tty answers a /btw
+#       in this session (its marker, ~/.cache/mermaid-tty/btw-<session_id>,
+#       is 1 and under 300 s old);
 #       then Path (aqua) at the right end. With COLUMNS known, the path is
 #       right-aligned and shortened from the left (…/) to fit; otherwise it
 #       follows the other items after the rule.
@@ -61,7 +61,7 @@ file_mtime() {
 # --- Configuration ---------------------------------------------------------
 # A literal `\n` token in SEGMENTS starts the next line. `path` is placed at
 # the right end of its line. Segments without data take no space.
-SEGMENTS="model effort waka venv ctx \n branch btw diff path"
+SEGMENTS="model effort waka venv ctx \n branch diff btw path"
 SEP=' │ '
 
 ICONS_ON=1

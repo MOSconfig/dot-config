@@ -39,11 +39,12 @@
 #       a ten-cell bar, the percentage in green/yellow/red, and the capacity.
 #   L2: Branch (orange) with its indicators (✓ clean or ● dirty, aqua
 #       ahead/behind, a purple stash icon with the count when there are
-#       stashes), btw (yellow): "answering Ns" while a mermaid-tty marker,
+#       stashes), Diff (blue): this session's +added in green and -removed
+#       in red, nonzero parts only, hidden when both are 0; btw (yellow):
+#       "answering Ns" while a mermaid-tty marker,
 #       ~/.cache/mermaid-tty/btw-<session_id>, is 1 and under 300 s old
 #       (mermaid-tty runs only in Claude Code, so it stays hidden here; kept
-#       for the shared layout), Diff (blue): this session's +added in green and -removed
-#       in red, nonzero parts only, hidden when both are 0; then Path (aqua)
+#       for the shared layout); then Path (aqua)
 #       at the right end: right-aligned with COLUMNS and shortened from the
 #       left (…/) to fit, otherwise after the rule.
 #   Bottom: separator + active subagents — root + one line per live task subagent
@@ -88,7 +89,7 @@ file_mtime() {
 # --- Configuration ---------------------------------------------------------
 # A literal `\n` token in SEGMENTS starts the next line. `path` is placed
 # at the right end of its line. Segments without data take no space.
-SEGMENTS="${COPILOT_STATUSLINE_SEGMENTS:-model effort premium waka subagents venv ctx \n branch btw diff path}"
+SEGMENTS="${COPILOT_STATUSLINE_SEGMENTS:-model effort premium waka subagents venv ctx \n branch diff btw path}"
 SEP=' │ '
 SUBAGENT_SEPARATOR='----------------------------------------'
 
@@ -519,10 +520,6 @@ seg_last_call() {
     "$C_FG" "$(fmt_tokens "$last_in")" "$(fmt_tokens "$last_out")" "$C_RESET"
 }
 
-# Diff is in SEGMENTS only when the user opts in — Copilot's footer can
-# show this via showCodeChanges, and most of the time the noise/value
-# tradeoff isn't worth it. Kept here so re-enabling is just a matter of
-# adding `diff` to SEGMENTS.
 seg_diff() {
   # This session's code changes: +added in green and -removed in red, only
   # the nonzero parts; hidden when both are 0.

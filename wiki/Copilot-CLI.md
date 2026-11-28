@@ -85,7 +85,7 @@ Remove any later `alias copilot=...` from `~/.zshrc`; it would override the mana
 The Copilot status line shares the two-line design and locally generated Apollo colors with Claude. A padding row comes first, then:
 
 1. model, effort, requests, WakaTime, tasks (hidden when no subagent runs), venv, and context last (a ten-cell bar, the percentage, and the capacity)
-2. branch first, with its indicators (✓ clean or ● dirty, ahead/behind, and a stash icon with the count when there are stashes), then btw (mermaid-tty's `/btw` item, shared with Claude's status line; hidden here, as mermaid-tty runs only in Claude Code), then Diff (this session's `+added` in green and `-removed` in red, only the nonzero parts, hidden when both are 0), and the folder path at the right end
+2. branch first, with its indicators (✓ clean or ● dirty, ahead/behind, and a stash icon with the count when there are stashes), then Diff (this session's `+added` in green and `-removed` in red, only the nonzero parts, hidden when both are 0), then btw (mermaid-tty's `/btw` item, shared with Claude's status line; hidden here, as mermaid-tty runs only in Claude Code), and the folder path at the right end
 
 Every item is an accent-colored Nerd Font icon, a muted label, and its value; a thin rule separates items, and an item without data is hidden. With `COLUMNS` known, the path is right-aligned and shortened from the left (`…/`) to fit; otherwise it follows the other items. Live-subagent rows stay below the two lines.
 
